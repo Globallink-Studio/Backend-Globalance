@@ -1,9 +1,11 @@
-import { Router } from "express";
-import { pool } from "../db/pool";
+import { Request, Response, NextFunction } from "express";
+import { pool } from "../../db/pool";
 
-export const healthRouter = Router();
-
-healthRouter.get("/", async (_req, res, next) => {
+export async function getHealth(
+  _req: Request,
+  res: Response,
+  next: NextFunction,
+) {
   try {
     const result = await pool.query("SELECT NOW() AS now");
 
@@ -17,4 +19,4 @@ healthRouter.get("/", async (_req, res, next) => {
   } catch (error) {
     next(error);
   }
-});
+}
