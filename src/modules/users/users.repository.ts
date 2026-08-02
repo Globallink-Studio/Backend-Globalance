@@ -114,3 +114,42 @@ export async function createCompanyProfile(
 
   return rows[0];
 }
+
+export type UserWithProfile = {
+  id: string;
+  firebase_uid: string;
+  email: string;
+  user_type: "person" | "company" | null;
+  status: "active" | "inactive" | "blocked";
+  first_name: string | null;
+  last_name: string | null;
+  legal_name: string | null;
+};
+
+export async function findUserWithProfileByFirebaseUid(
+  client: PoolClient,
+  firebaseUid: string,
+): Promise<UserWithProfile | null> {
+  const { rows } = await client.query<UserWithProfile>(
+    `
+      SELECT
+        u.id,
+        u.firebase_uid,
+        u.email,
+        u.user_type,
+        u.status,
+        pp.first_name,
+        pp.last_name,
+        cp.legal_name
+      FROM users u
+      LEFT JOIN person_profiles pp
+        ON pp.user_id = u.id
+      LEFT JOIN company_profiles cp
+        ON cp.user_id = u.id
+      WHERE u.firebase_uid = $1
+    `,
+    [firebaseUid],
+  );
+
+  return rows[0] ?? null;
+}

@@ -1,7 +1,8 @@
+import { pool } from "../../db/pool";
 import {
-  UserRepository,
+  findUserWithProfileByFirebaseUid,
   UserWithProfile,
-} from "../users/user.repository";
+} from "../users/users.repository";
 import {
   Wallet,
   WalletRepository,
@@ -15,7 +16,7 @@ export interface WalletSummary {
   user: {
     id: string;
     email: string;
-    user_type: "person" | "company";
+    user_type: "person" | "company" | null;
     first_name: string | null;
     last_name: string | null;
     legal_name: string | null;
@@ -26,49 +27,54 @@ export interface WalletSummary {
 
 export class WalletService {
   constructor(
-    private readonly userRepository = new UserRepository(),
     private readonly walletRepository = new WalletRepository(),
-    private readonly balanceRepository = new BalanceRepository()
+    private readonly balanceRepository = new BalanceRepository(),
   ) {}
 
   async getWalletByFirebaseUid(
-    firebaseUid: string
+    firebaseUid: string,
   ): Promise<WalletSummary> {
-    const user: UserWithProfile | null =
-      await this.userRepository.findByFirebaseUid(firebaseUid);
+    const client = await pool.connect();
 
-    if (!user) {
-      throw new Error("Usuario no encontrado");
+    try {
+      const user: UserWithProfile | null =
+        await findUserWithProfileByFirebaseUid(client, firebaseUid);
+
+      if (!user) {
+        throw new Error("Usuario no encontrado");
+      }
+
+      if (user.status !== "active") {
+        throw new Error("El usuario no está activo");
+      }
+
+      const wallet = await this.walletRepository.findByUserId(user.id);
+
+      if (!wallet) {
+        throw new Error("Billetera no encontrada");
+      }
+
+      if (wallet.status !== "active") {
+        throw new Error("La billetera no está activa");
+      }
+
+      const balances =
+        await this.balanceRepository.findByWalletId(wallet.id);
+
+      return {
+        user: {
+          id: user.id,
+          email: user.email,
+          user_type: user.user_type,
+          first_name: user.first_name,
+          last_name: user.last_name,
+          legal_name: user.legal_name,
+        },
+        wallet,
+        balances,
+      };
+    } finally {
+      client.release();
     }
-
-    if (user.status !== "active") {
-      throw new Error("El usuario no está activo");
-    }
-
-    const wallet = await this.walletRepository.findByUserId(user.id);
-
-    if (!wallet) {
-      throw new Error("Billetera no encontrada");
-    }
-
-    if (wallet.status !== "active") {
-      throw new Error("La billetera no está activa");
-    }
-
-    const balances =
-      await this.balanceRepository.findByWalletId(wallet.id);
-
-    return {
-      user: {
-        id: user.id,
-        email: user.email,
-        user_type: user.user_type,
-        first_name: user.first_name,
-        last_name: user.last_name,
-        legal_name: user.legal_name,
-      },
-      wallet,
-      balances,
-    };
   }
 }
