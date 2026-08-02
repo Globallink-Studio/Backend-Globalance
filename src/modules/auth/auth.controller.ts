@@ -7,25 +7,34 @@ export function getCurrentUser(req: Request, res: Response) {
   });
 }
 
-
 export async function syncCurrentUser(
   req: Request,
   res: Response,
   next: NextFunction,
 ) {
   try {
-    const firebaseUid = req.user!.uid;
-
-    const user = await syncUser(firebaseUid);
-
-    if (user) {
-      return res.status(200).json({
-        data: user,
+    if (!req.user) {
+      return res.status(401).json({
+        error: {
+          code: "UNAUTHORIZED",
+          message: "Usuario no autenticado.",
+        },
       });
     }
 
-    return res.status(404).json({
-      message: "El usuario no existe en la base de datos.",
+    if (!req.user.email) {
+      return res.status(400).json({
+        error: {
+          code: "EMAIL_REQUIRED",
+          message: "El usuario autenticado no tiene un correo electrónico.",
+        },
+      });
+    }
+
+    const user = await syncUser(req.user);
+
+    return res.status(200).json({
+      data: user,
     });
   } catch (error) {
     next(error);
