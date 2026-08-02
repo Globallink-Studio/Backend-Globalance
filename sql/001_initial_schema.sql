@@ -5,7 +5,7 @@ CREATE TABLE users (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     firebase_uid VARCHAR(128) UNIQUE NOT NULL,
     email CITEXT UNIQUE NOT NULL,
-    user_type VARCHAR(20) NOT NULL
+    user_type VARCHAR(20)
         CHECK (user_type IN ('person', 'company')),
     display_currency CHAR(3) NOT NULL DEFAULT 'ARS',
     status VARCHAR(20) NOT NULL DEFAULT 'active'
