@@ -1,8 +1,8 @@
-import "dotenv/config";
 import { app } from "./app";
+import { env } from "./config/env";
+import "./config/firebase";
 
-const port = Number(process.env.PORT) || 3000;
-
-app.listen(port, () => {
-  console.log(`API ejecutándose en http://localhost:${port}`);
+app.listen(env.PORT, () => {
+  console.log(`🚀 Server running on port ${env.PORT}`);
+  console.log("🔥 Firebase Admin initialized");
 });
