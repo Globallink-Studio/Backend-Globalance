@@ -31,9 +31,11 @@ export class WalletService {
     private readonly balanceRepository = new BalanceRepository()
   ) {}
 
-  async getWalletByUserId(userId: string): Promise<WalletSummary> {
+  async getWalletByFirebaseUid(
+    firebaseUid: string
+  ): Promise<WalletSummary> {
     const user: UserWithProfile | null =
-      await this.userRepository.findById(userId);
+      await this.userRepository.findByFirebaseUid(firebaseUid);
 
     if (!user) {
       throw new Error("Usuario no encontrado");
@@ -43,7 +45,7 @@ export class WalletService {
       throw new Error("El usuario no está activo");
     }
 
-    const wallet = await this.walletRepository.findByUserId(userId);
+    const wallet = await this.walletRepository.findByUserId(user.id);
 
     if (!wallet) {
       throw new Error("Billetera no encontrada");
@@ -53,7 +55,8 @@ export class WalletService {
       throw new Error("La billetera no está activa");
     }
 
-    const balances = await this.balanceRepository.findByWalletId(wallet.id);
+    const balances =
+      await this.balanceRepository.findByWalletId(wallet.id);
 
     return {
       user: {

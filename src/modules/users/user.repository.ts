@@ -47,6 +47,38 @@ export class UserRepository {
     return result.rows[0] ?? null;
   }
 
+  async findByFirebaseUid(
+  firebaseUid: string
+): Promise<UserWithProfile | null> {
+  const result = await pool.query<UserWithProfile>(
+    `
+      SELECT
+        u.id,
+        u.firebase_uid,
+        u.email,
+        u.user_type,
+        u.display_currency,
+        u.status,
+        u.created_at,
+        u.last_access_at,
+        pp.first_name,
+        pp.last_name,
+        cp.legal_name,
+        COALESCE(pp.document, cp.document) AS document,
+        COALESCE(pp.phone, cp.phone) AS phone
+      FROM users u
+      LEFT JOIN person_profiles pp
+        ON pp.user_id = u.id
+      LEFT JOIN company_profiles cp
+        ON cp.user_id = u.id
+      WHERE u.firebase_uid = $1
+    `,
+    [firebaseUid]
+  );
+
+  return result.rows[0] ?? null;
+}
+
   async findByEmail(email: string): Promise<UserWithProfile | null> {
     const result = await pool.query<UserWithProfile>(
       `

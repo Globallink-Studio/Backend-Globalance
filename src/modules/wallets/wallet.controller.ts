@@ -1,12 +1,6 @@
 import { NextFunction, Request, Response } from "express";
 import { WalletService } from "./wallet.service";
 
-type AuthenticatedRequest = Request & {
-  user?: {
-    id: string;
-  };
-};
-
 export class WalletController {
   constructor(
     private readonly walletService = new WalletService()
@@ -18,17 +12,17 @@ export class WalletController {
     next: NextFunction
   ): Promise<void> => {
     try {
-      const authenticatedRequest = req as AuthenticatedRequest;
-      const userId = authenticatedRequest.user?.id;
+      const firebaseUid = req.user?.uid;
 
-      if (!userId) {
+      if (!firebaseUid) {
         res.status(401).json({
           message: "Usuario no autenticado",
         });
         return;
       }
 
-      const wallet = await this.walletService.getWalletByUserId(userId);
+      const wallet =
+        await this.walletService.getWalletByFirebaseUid(firebaseUid);
 
       res.status(200).json(wallet);
     } catch (error) {

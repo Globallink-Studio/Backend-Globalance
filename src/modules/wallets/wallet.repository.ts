@@ -67,7 +67,9 @@ export class WalletRepository {
     return result.rows[0] ?? null;
   }
 
-  async findByAccountNumber(accountNumber: string): Promise<Wallet | null> {
+  async findByAccountNumber(
+    accountNumber: string
+  ): Promise<Wallet | null> {
     const result = await pool.query<Wallet>(
       `
         SELECT
