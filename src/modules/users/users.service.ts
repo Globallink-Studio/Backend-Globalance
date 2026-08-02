@@ -1,0 +1,85 @@
+import { pool } from "../../db/pool";
+import { findUserByFirebaseUid } from "../auth/auth.repository";
+import {
+  createCompanyProfile,
+  createPersonProfile,
+  updateUserType,
+  updateWalletAlias,
+  UserType,
+} from "./users.repository";
+
+type CompletePersonProfile = {
+  userType: "person";
+  firstName: string;
+  lastName: string;
+  document: string;
+  phone: string;
+  alias: string;
+};
+
+type CompleteCompanyProfile = {
+  userType: "company";
+  legalName: string;
+  document: string;
+  phone: string;
+  alias: string;
+};
+
+export type CompleteProfileParams =
+  | CompletePersonProfile
+  | CompleteCompanyProfile;
+
+export async function completeProfile(
+  firebaseUid: string,
+  profile: CompleteProfileParams,
+) {
+  const client = await pool.connect();
+
+  try {
+    await client.query("BEGIN");
+
+    const user = await findUserByFirebaseUid(client, firebaseUid);
+
+    if (!user) {
+      throw new Error("Usuario no encontrado.");
+    }
+
+    await updateUserType(client, {
+      firebaseUid,
+      userType: profile.userType,
+    });
+
+    await updateWalletAlias(client, {
+      userId: user.id,
+      alias: profile.alias,
+    });
+
+    if (profile.userType === "person") {
+      await createPersonProfile(client, {
+        userId: user.id,
+        firstName: profile.firstName,
+        lastName: profile.lastName,
+        document: profile.document,
+        phone: profile.phone,
+      });
+    } else {
+      await createCompanyProfile(client, {
+        userId: user.id,
+        legalName: profile.legalName,
+        document: profile.document,
+        phone: profile.phone,
+      });
+    }
+
+    await client.query("COMMIT");
+
+    return {
+      message: "Perfil completado correctamente.",
+    };
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
+}
