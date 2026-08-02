@@ -2,6 +2,7 @@ import { NextFunction, Request, Response } from "express";
 import {
   completeProfile,
   CompleteProfileParams,
+  getProfile,
 } from "./users.service";
 
 export async function updateProfile(
@@ -19,6 +20,22 @@ export async function updateProfile(
 
     return res.status(200).json({
       data: result,
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function readProfile(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) {
+  try {
+    const profile = await getProfile(req.user!.uid);
+
+    return res.status(200).json({
+      data: profile,
     });
   } catch (error) {
     next(error);

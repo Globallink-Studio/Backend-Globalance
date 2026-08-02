@@ -120,10 +120,16 @@ export type UserWithProfile = {
   firebase_uid: string;
   email: string;
   user_type: "person" | "company" | null;
+  display_currency: string;
   status: "active" | "inactive" | "blocked";
+  created_at: Date;
+  last_access_at: Date | null;
   first_name: string | null;
   last_name: string | null;
   legal_name: string | null;
+  document: string | null;
+  phone: string | null;
+  alias: string | null;
 };
 
 export async function findUserWithProfileByFirebaseUid(
@@ -137,15 +143,23 @@ export async function findUserWithProfileByFirebaseUid(
         u.firebase_uid,
         u.email,
         u.user_type,
+        u.display_currency,
         u.status,
+        u.created_at,
+        u.last_access_at,
         pp.first_name,
         pp.last_name,
-        cp.legal_name
+        cp.legal_name,
+        COALESCE(pp.document, cp.document) AS document,
+        COALESCE(pp.phone, cp.phone) AS phone,
+        w.alias
       FROM users u
       LEFT JOIN person_profiles pp
         ON pp.user_id = u.id
       LEFT JOIN company_profiles cp
         ON cp.user_id = u.id
+      LEFT JOIN wallets w
+        ON w.user_id = u.id
       WHERE u.firebase_uid = $1
     `,
     [firebaseUid],
