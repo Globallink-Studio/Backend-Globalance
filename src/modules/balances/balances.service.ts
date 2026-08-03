@@ -1,6 +1,6 @@
 import { pool } from "../../db/pool";
 import { findUserByFirebaseUid } from "../auth/auth.repository";
-import { Balance, BalanceRepository } from "../wallets/balance.repository";
+import { Balance, BalanceRepository } from "./balances.repository";
 import { WalletRepository } from "../wallets/wallet.repository";
 
 export class BalancesService {
