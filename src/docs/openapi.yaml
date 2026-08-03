@@ -1,0 +1,541 @@
+openapi: 3.0.3
+
+info:
+  title: Globalance
+  version: 1.0.0
+  description: Documentación de la API del backend de la billetera virtual Globalance.
+
+servers:
+  - url: http://localhost:3000/api
+    description: Servidor local
+
+  - url: https://backend-globalance-production-5e5a.up.railway.app/api
+    description: Servidor de producción
+
+tags:
+  - name: Health
+    description: Estado del servidor y conexión con la base de datos
+
+  - name: Authentication
+    description: Autenticación y sincronización de usuarios con Firebase
+
+  - name: Wallet
+    description: Información de la billetera del usuario
+
+  - name: Balances
+    description: Consulta de saldos disponibles
+
+  - name: Users
+    description: Gestión del perfil personal o empresarial
+
+paths:
+  /health:
+    get:
+      tags:
+        - Health
+      summary: Verificar el estado del backend
+      description: Comprueba que el servidor y la base de datos estén funcionando.
+      responses:
+        "200":
+          description: El backend funciona correctamente
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      status:
+                        type: string
+                        example: ok
+                      database:
+                        type: string
+                        example: connected
+                      timestamp:
+                        type: string
+                        format: date-time
+        "500":
+          description: Error interno del servidor
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /auth/me:
+    get:
+      tags:
+        - Authentication
+      summary: Obtener el usuario autenticado de Firebase
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Usuario autenticado
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/FirebaseUser"
+        "401":
+          description: Token ausente, inválido o vencido
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/sync:
+    post:
+      tags:
+        - Authentication
+      summary: Sincronizar el usuario de Firebase con PostgreSQL
+      description: Crea el usuario, su billetera y sus balances iniciales si todavía no existen.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Usuario sincronizado correctamente
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    oneOf:
+                      - $ref: "#/components/schemas/User"
+                      - type: object
+                        properties:
+                          user:
+                            $ref: "#/components/schemas/User"
+                          wallet:
+                            $ref: "#/components/schemas/Wallet"
+        "400":
+          description: El usuario autenticado no contiene un correo electrónico
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Usuario no autenticado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Error interno del servidor
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /wallet:
+    get:
+      tags:
+        - Wallet
+      summary: Consultar la billetera del usuario
+      description: Devuelve los datos del usuario, su billetera y los saldos disponibles en ARS, USD y EUR.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Billetera obtenida correctamente
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WalletSummary"
+        "401":
+          description: Token ausente, inválido o vencido
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Usuario o billetera no encontrados, o error interno
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /balances:
+    get:
+      tags:
+        - Balances
+      summary: Consultar los saldos del usuario
+      description: Devuelve los saldos de la billetera autenticada en ARS, USD y EUR.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Saldos obtenidos correctamente
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  balances:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Balance"
+        "401":
+          description: Token ausente, inválido o vencido
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Usuario o billetera no encontrados, o error interno
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /users/profile:
+    get:
+      tags:
+        - Users
+      summary: Consultar el perfil del usuario
+      description: Devuelve el perfil personal o empresarial del usuario autenticado.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Perfil obtenido correctamente
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/UserProfile"
+        "401":
+          description: Token ausente, inválido o vencido
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Error interno del servidor
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+    patch:
+      tags:
+        - Users
+      summary: Completar el perfil del usuario
+      description: Define si la cuenta es personal o empresarial y registra sus datos.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - $ref: "#/components/schemas/PersonProfileInput"
+                - $ref: "#/components/schemas/CompanyProfileInput"
+      responses:
+        "200":
+          description: Perfil completado correctamente
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      message:
+                        type: string
+                        example: Perfil completado correctamente.
+        "400":
+          description: Datos del perfil inválidos
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Token ausente, inválido o vencido
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Error interno del servidor
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: Firebase ID Token
+      description: Ingresar el token de Firebase sin escribir la palabra Bearer.
+
+  schemas:
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+              example: UNAUTHORIZED
+            message:
+              type: string
+              example: Usuario no autenticado
+
+    FirebaseUser:
+      type: object
+      required:
+        - uid
+      properties:
+        uid:
+          type: string
+          description: Identificador único generado por Firebase
+          example: firebase-user-123
+        email:
+          type: string
+          format: email
+          nullable: true
+          example: usuario@correo.com
+        name:
+          type: string
+          nullable: true
+          example: Jazmín Morínigo
+        picture:
+          type: string
+          format: uri
+          nullable: true
+
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        firebase_uid:
+          type: string
+        email:
+          type: string
+          format: email
+        user_type:
+          type: string
+          enum:
+            - person
+            - company
+          nullable: true
+        display_currency:
+          type: string
+          example: ARS
+        status:
+          type: string
+          enum:
+            - active
+            - inactive
+            - blocked
+        created_at:
+          type: string
+          format: date-time
+        last_access_at:
+          type: string
+          format: date-time
+          nullable: true
+
+    Wallet:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+          format: uuid
+        alias:
+          type: string
+          example: jazmin.globalance
+        account_number:
+          type: string
+          example: "0000000000000000000001"
+        status:
+          type: string
+          enum:
+            - active
+            - inactive
+            - blocked
+        created_at:
+          type: string
+          format: date-time
+
+    UserProfile:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        firebase_uid:
+          type: string
+        email:
+          type: string
+          format: email
+        user_type:
+          type: string
+          enum:
+            - person
+            - company
+          nullable: true
+        status:
+          type: string
+          enum:
+            - active
+            - inactive
+            - blocked
+        first_name:
+          type: string
+          nullable: true
+        last_name:
+          type: string
+          nullable: true
+        legal_name:
+          type: string
+          nullable: true
+
+    PersonProfileInput:
+      type: object
+      required:
+        - userType
+        - firstName
+        - lastName
+        - document
+        - phone
+        - alias
+      properties:
+        userType:
+          type: string
+          enum:
+            - person
+        firstName:
+          type: string
+          minLength: 2
+          maxLength: 100
+          example: Jazmín
+        lastName:
+          type: string
+          minLength: 2
+          maxLength: 100
+          example: Morínigo
+        document:
+          type: string
+          minLength: 5
+          maxLength: 30
+          example: "12345678"
+        phone:
+          type: string
+          minLength: 7
+          maxLength: 30
+          example: "+5491123456789"
+        alias:
+          type: string
+          minLength: 6
+          maxLength: 30
+          pattern: "^[a-z0-9.-]+$"
+          example: jazmin.globalance
+      additionalProperties: false
+
+    CompanyProfileInput:
+      type: object
+      required:
+        - userType
+        - legalName
+        - document
+        - phone
+        - alias
+      properties:
+        userType:
+          type: string
+          enum:
+            - company
+        legalName:
+          type: string
+          minLength: 2
+          maxLength: 150
+          example: Globalance S.A.
+        document:
+          type: string
+          minLength: 5
+          maxLength: 30
+          example: "30123456789"
+        phone:
+          type: string
+          minLength: 7
+          maxLength: 30
+          example: "+5491123456789"
+        alias:
+          type: string
+          minLength: 6
+          maxLength: 30
+          pattern: "^[a-z0-9.-]+$"
+          example: globalance.empresa
+      additionalProperties: false
+
+    Balance:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        wallet_id:
+          type: string
+          format: uuid
+        currency_code:
+          type: string
+          enum:
+            - ARS
+            - USD
+            - EUR
+        amount:
+          type: string
+          example: "1500.00"
+          description: El monto se devuelve como texto para conservar la precisión decimal.
+        updated_at:
+          type: string
+          format: date-time
+
+    WalletSummary:
+      type: object
+      properties:
+        user:
+          type: object
+          properties:
+            id:
+              type: string
+              format: uuid
+            email:
+              type: string
+              format: email
+            user_type:
+              type: string
+              enum:
+                - person
+                - company
+              nullable: true
+            first_name:
+              type: string
+              nullable: true
+            last_name:
+              type: string
+              nullable: true
+            legal_name:
+              type: string
+              nullable: true
+        wallet:
+          $ref: "#/components/schemas/Wallet"
+        balances:
+          type: array
+          items:
+            $ref: "#/components/schemas/Balance"

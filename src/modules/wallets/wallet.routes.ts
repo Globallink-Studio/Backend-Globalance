@@ -5,10 +5,11 @@ import { WalletController } from "./wallet.controller";
 const walletRouter = Router();
 const walletController = new WalletController();
 
+
 walletRouter.get(
   "/",
   verifyFirebaseToken,
-  walletController.getWallet
+  walletController.getWallet,
 );
 
 export { walletRouter };
