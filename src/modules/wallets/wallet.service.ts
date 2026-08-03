@@ -10,7 +10,7 @@ import {
 import {
   Balance,
   BalanceRepository,
-} from "./balance.repository";
+} from "../balances/balances.repository";
 
 export interface WalletSummary {
   user: {
