@@ -87,7 +87,8 @@ CREATE TABLE currencies (
 CREATE OR REPLACE FUNCTION prevent_user_type_change()
 RETURNS TRIGGER AS $$
 BEGIN
-    IF NEW.user_type IS DISTINCT FROM OLD.user_type THEN
+    IF OLD.user_type IS NOT NULL
+    AND NEW.user_type IS DISTINCT FROM OLD.user_type THEN
         RAISE EXCEPTION
             'El tipo de usuario no puede modificarse después del registro';
     END IF;

@@ -1,6 +1,7 @@
 import { pool } from "../../db/pool";
 import { findUserByFirebaseUid } from "../auth/auth.repository";
 import {
+  findUserWithProfileByFirebaseUid,
   createCompanyProfile,
   createPersonProfile,
   updateUserType,
@@ -79,6 +80,25 @@ export async function completeProfile(
   } catch (error) {
     await client.query("ROLLBACK");
     throw error;
+  } finally {
+    client.release();
+  }
+}
+
+export async function getProfile(firebaseUid: string) {
+  const client = await pool.connect();
+
+  try {
+    const profile = await findUserWithProfileByFirebaseUid(
+      client,
+      firebaseUid,
+    );
+
+    if (!profile) {
+      throw new Error("Usuario no encontrado");
+    }
+
+    return profile;
   } finally {
     client.release();
   }
