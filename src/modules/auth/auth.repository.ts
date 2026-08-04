@@ -33,6 +33,23 @@ export async function findUserByFirebaseUid(
   return rows[0] ?? null;
 }
 
+export async function updateLastAccess(
+  client: PoolClient,
+  firebaseUid: string,
+): Promise<User> {
+  const { rows } = await client.query<User>(
+    `
+      UPDATE users
+      SET last_access_at = CURRENT_TIMESTAMP
+      WHERE firebase_uid = $1
+      RETURNING *
+    `,
+    [firebaseUid],
+  );
+
+  return rows[0];
+}
+
 export async function createUser(
   client: PoolClient,
   { firebaseUid, email }: CreateUserParams,
@@ -41,9 +58,10 @@ export async function createUser(
     `
       INSERT INTO users (
         firebase_uid,
-        email
+        email,
+        last_access_at
       )
-      VALUES ($1, $2)
+      VALUES ($1, $2, CURRENT_TIMESTAMP)
       RETURNING *
     `,
     [firebaseUid, email],
