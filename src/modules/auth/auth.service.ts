@@ -4,6 +4,7 @@ import {
   createUser,
   createWallet,
   findUserByFirebaseUid,
+  updateLastAccess,
 } from "./auth.repository";
 import { AuthenticatedUser } from "../../types/authenticated-user";
 
@@ -20,9 +21,15 @@ export async function syncUser(firebaseUser: AuthenticatedUser) {
     );
 
     if (user) {
-      await client.query("COMMIT");
-      return user;
-    }
+  const updatedUser = await updateLastAccess(
+    client,
+    firebaseUser.uid,
+  );
+
+  await client.query("COMMIT");
+
+  return updatedUser;
+}
 
     const newUser = await createUser(client, {
     firebaseUid: firebaseUser.uid,
