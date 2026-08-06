@@ -1,4 +1,5 @@
 import { pool } from "../../db/pool";
+import { AppError } from "../../errors/app-error";
 import { findUserByFirebaseUid } from "../auth/auth.repository";
 import {
   findUserWithProfileByFirebaseUid,
@@ -42,7 +43,11 @@ export async function completeProfile(
     const user = await findUserByFirebaseUid(client, firebaseUid);
 
     if (!user) {
-      throw new Error("Usuario no encontrado.");
+      throw new AppError(
+        404,
+        "USER_NOT_FOUND",
+        "Usuario no encontrado.",
+      );
     }
 
     await updateUserType(client, {
@@ -95,7 +100,11 @@ export async function getProfile(firebaseUid: string) {
     );
 
     if (!profile) {
-      throw new Error("Usuario no encontrado");
+      throw new AppError(
+        404,
+        "USER_NOT_FOUND",
+        "Usuario no encontrado.",
+      );
     }
 
     return profile;

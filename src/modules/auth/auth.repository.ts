@@ -12,6 +12,15 @@ export type User = {
   last_access_at: Date | null;
 };
 
+export type Wallet = {
+  id: string;
+  user_id: string;
+  alias: string;
+  account_number: string;
+  status: "active" | "inactive" | "blocked";
+  created_at: Date;
+};
+
 type CreateUserParams = {
   firebaseUid: string;
   email: string;
@@ -28,6 +37,28 @@ export async function findUserByFirebaseUid(
       WHERE firebase_uid = $1
     `,
     [firebaseUid],
+  );
+
+  return rows[0] ?? null;
+}
+
+export async function findWalletByUserId(
+  client: PoolClient,
+  userId: string,
+): Promise<Wallet | null> {
+  const { rows } = await client.query<Wallet>(
+    `
+      SELECT
+        id,
+        user_id,
+        alias,
+        account_number,
+        status,
+        created_at
+      FROM wallets
+      WHERE user_id = $1
+    `,
+    [userId],
   );
 
   return rows[0] ?? null;
