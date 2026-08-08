@@ -4,6 +4,7 @@ import authRoutes from "../modules/auth/auth.routes";
 import { walletRouter } from "../modules/wallets/wallet.routes";
 import { balancesRouter } from "../modules/balances/balances.routes";
 import { usersRouter } from "../modules/users/users.routes";
+import { transactionsRouter } from "../modules/transactions/transactions.routes";
 
 const router = Router();
 
@@ -12,5 +13,6 @@ router.use("/auth", authRoutes);
 router.use("/wallet", walletRouter);
 router.use("/balances", balancesRouter);
 router.use("/users", usersRouter);
+router.use("/transactions", transactionsRouter);
 
 export default router;
