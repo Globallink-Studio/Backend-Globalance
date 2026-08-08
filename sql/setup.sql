@@ -1,6 +1,7 @@
 \ir 001_initial_schema.sql
 \ir 002_transactions_schema.sql
 \ir 003_email_deliveries.sql
+\ir 004_exchange_rate_cache.sql
 
 INSERT INTO currencies (code, name, symbol, decimal_places)
 VALUES
