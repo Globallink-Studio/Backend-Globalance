@@ -50,4 +50,44 @@ export const demoFundingSchema = z
     }
   });
 
+  const transferBaseFields = {
+  currency: z.enum(["ARS", "USD", "EUR"]),
+  amount: amountSchema,
+};
+
+export const internalTransferSchema = z.discriminatedUnion(
+  "destinationType",
+  [
+    z
+      .object({
+        ...transferBaseFields,
+        destinationType: z.literal("alias"),
+        destinationValue: z
+          .string()
+          .trim()
+          .min(6, "El alias debe tener al menos 6 caracteres")
+          .max(30, "El alias no puede superar los 30 caracteres")
+          .regex(
+            /^[a-z0-9.-]+$/,
+            "El alias tiene un formato inválido",
+          ),
+      })
+      .strict(),
+    z
+      .object({
+        ...transferBaseFields,
+        destinationType: z.literal("accountNumber"),
+        destinationValue: z
+          .string()
+          .trim()
+          .regex(
+            /^GLB-[0-9A-F]{8}$/,
+            "El número de cuenta tiene un formato inválido",
+          ),
+      })
+      .strict(),
+  ],
+);
+
 export type DemoFundingInput = z.infer<typeof demoFundingSchema>;
+export type InternalTransferInput = z.infer<typeof internalTransferSchema>;

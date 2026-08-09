@@ -5,6 +5,7 @@ import { TransactionsController } from "./transactions.controller";
 import {
   demoFundingSchema,
   exchangeSchema,
+  internalTransferSchema,
 } from "./transactions.schema";
 
 const transactionsRouter = Router();
@@ -22,6 +23,13 @@ transactionsRouter.post(
   verifyFirebaseToken,
   validateBody(exchangeSchema),
   transactionsController.createExchange,
+);
+
+transactionsRouter.post(
+  "/transfers/internal",
+  verifyFirebaseToken,
+  validateBody(internalTransferSchema),
+  transactionsController.createInternalTransfer,
 );
 
 export { transactionsRouter };

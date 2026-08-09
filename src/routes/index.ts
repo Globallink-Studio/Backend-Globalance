@@ -7,6 +7,7 @@ import { usersRouter } from "../modules/users/users.routes";
 import { transactionsRouter } from "../modules/transactions/transactions.routes";
 import { quotesRouter } from "../modules/exchange/quotes.routes";
 import { ratesRouter } from "../modules/exchange/rates.routes";
+import { paymentRequestsRouter } from "../modules/payment-requests/payment-requests.routes";
 
 const router = Router();
 
@@ -18,5 +19,6 @@ router.use("/users", usersRouter);
 router.use("/transactions", transactionsRouter);
 router.use("/exchange", quotesRouter);
 router.use("/exchange", ratesRouter);
+router.use("/payment-requests", paymentRequestsRouter);
 
 export default router;

@@ -75,6 +75,32 @@ export interface ExchangeRecord {
   target_balance_after: string;
 }
 
+export interface TransferDestinationWallet {
+  id: string;
+  user_id: string;
+  alias: string;
+  account_number: string;
+  status: "active" | "inactive" | "blocked";
+}
+
+export interface TransferBalance {
+  id: string;
+  wallet_id: string;
+  amount: string;
+}
+
+export interface InternalTransferRecord {
+  transaction_id: string;
+  status: string;
+  destination_wallet_id: string;
+  destination_alias: string;
+  currency: string;
+  amount: string;
+  source_balance_after: string;
+  destination_balance_after: string;
+  created_at: Date;
+}
+
 export class TransactionsRepository {
   async findWalletByUserId(
     client: PoolClient,
@@ -289,7 +315,17 @@ export class TransactionsRepository {
             ON b.id = m.balance_id
           WHERE m.transaction_id = t.id
         ) AS movement_data ON TRUE
-        WHERE t.wallet_id = $1
+        WHERE (
+          t.wallet_id = $1
+          OR EXISTS (
+            SELECT 1
+            FROM movements AS wallet_movement
+            INNER JOIN balances AS wallet_balance
+              ON wallet_balance.id = wallet_movement.balance_id
+            WHERE wallet_movement.transaction_id = t.id
+              AND wallet_balance.wallet_id = $1
+          )
+        )
           AND ($2::varchar IS NULL OR t.type = $2)
           AND (
             $3::char(3) IS NULL
@@ -430,7 +466,103 @@ export class TransactionsRepository {
           c.rate_provider,
           c.rate_fetched_at
       `,
-      [idempotencyKey, walletId],
+            [idempotencyKey, walletId],
+    );
+
+    return result.rows[0] ?? null;
+  }
+
+  async findDestinationWallet(
+    client: PoolClient,
+    destinationType: "alias" | "accountNumber",
+    destinationValue: string,
+  ): Promise<TransferDestinationWallet | null> {
+    const column =
+      destinationType === "alias"
+        ? "alias"
+        : "account_number";
+
+    const result =
+      await client.query<TransferDestinationWallet>(
+        `
+          SELECT
+            id,
+            user_id,
+            alias,
+            account_number,
+            status
+          FROM wallets
+          WHERE ${column} = $1
+        `,
+        [destinationValue],
+      );
+
+    return result.rows[0] ?? null;
+  }
+
+    async findTransferBalancesForUpdate(
+    client: PoolClient,
+    walletIds: [string, string],
+    currency: string,
+  ): Promise<TransferBalance[]> {
+    const result = await client.query<TransferBalance>(
+      `
+        SELECT
+          id,
+          wallet_id,
+          amount
+        FROM balances
+        WHERE wallet_id = ANY($1::uuid[])
+          AND currency_code = $2
+        ORDER BY wallet_id
+        FOR UPDATE
+      `,
+      [walletIds, currency],
+    );
+
+    return result.rows;
+  }
+
+    async findInternalTransferByIdempotencyKey(
+    client: PoolClient,
+    idempotencyKey: string,
+    sourceWalletId: string,
+  ): Promise<InternalTransferRecord | null> {
+    const result = await client.query<InternalTransferRecord>(
+      `
+        SELECT
+          t.id AS transaction_id,
+          t.status,
+          tr.destination_wallet_id,
+          destination_wallet.alias AS destination_alias,
+          tr.currency_code AS currency,
+          tr.amount,
+          debit_movement.balance_after
+            AS source_balance_after,
+          credit_movement.balance_after
+            AS destination_balance_after,
+          t.created_at
+        FROM transactions AS t
+        INNER JOIN transfers AS tr
+          ON tr.transaction_id = t.id
+        INNER JOIN wallets AS destination_wallet
+          ON destination_wallet.id =
+             tr.destination_wallet_id
+        INNER JOIN movements AS debit_movement
+          ON debit_movement.transaction_id = t.id
+         AND debit_movement.direction = 'debit'
+         AND debit_movement.concept = 'principal'
+        INNER JOIN movements AS credit_movement
+          ON credit_movement.transaction_id = t.id
+         AND credit_movement.direction = 'credit'
+         AND credit_movement.concept = 'principal'
+        WHERE t.idempotency_key = $1
+          AND t.wallet_id = $2
+          AND t.type = 'transfer'
+          AND tr.destination_type = 'internal'
+        LIMIT 1
+      `,
+      [idempotencyKey, sourceWalletId],
     );
 
     return result.rows[0] ?? null;
@@ -466,7 +598,7 @@ export class TransactionsRepository {
     return result.rows[0].total;
   }
 
-    async createExchangeTransaction(
+      async createExchangeTransaction(
     client: PoolClient,
     walletId: string,
     idempotencyKey: string,
@@ -487,6 +619,41 @@ export class TransactionsRepository {
         RETURNING id
       `,
       [walletId, type, description, idempotencyKey],
+    );
+
+    return result.rows[0].id;
+  }
+
+  async createTransferTransaction(
+    client: PoolClient,
+    sourceWalletId: string,
+    idempotencyKey: string,
+  ): Promise<string> {
+    const result = await client.query<{ id: string }>(
+      `
+        INSERT INTO transactions (
+          wallet_id,
+          type,
+          status,
+          description,
+          idempotency_key,
+          completed_at
+        )
+        VALUES (
+          $1,
+          'transfer',
+          'completed',
+          $2,
+          $3,
+          CURRENT_TIMESTAMP
+        )
+        RETURNING id
+      `,
+      [
+        sourceWalletId,
+        "Transferencia interna",
+        idempotencyKey,
+      ],
     );
 
     return result.rows[0].id;
@@ -537,14 +704,47 @@ export class TransactionsRepository {
       ],
     );
 
-    return result.rows[0].target_amount;
+        return result.rows[0].target_amount;
+  }
+
+  async createInternalTransferDetail(
+    client: PoolClient,
+    transactionId: string,
+    destinationWalletId: string,
+    currency: string,
+    amount: string,
+  ): Promise<void> {
+    await client.query(
+      `
+        INSERT INTO transfers (
+          transaction_id,
+          destination_type,
+          destination_wallet_id,
+          currency_code,
+          amount
+        )
+        VALUES (
+          $1,
+          'internal',
+          $2,
+          $3,
+          $4
+        )
+      `,
+      [
+        transactionId,
+        destinationWalletId,
+        currency,
+        amount,
+      ],
+    );
   }
 
     async decreaseBalance(
     client: PoolClient,
     balanceId: string,
     amount: string,
-  ): Promise<string> {
+  ): Promise<string | null> {
     const result = await client.query<{ amount: string }>(
       `
         UPDATE balances
@@ -558,11 +758,7 @@ export class TransactionsRepository {
       [balanceId, amount],
     );
 
-    if (!result.rows[0]) {
-      throw new Error("Saldo insuficiente al debitar el balance");
-    }
-
-    return result.rows[0].amount;
+    return result.rows[0]?.amount ?? null;
   }
 
     async createDebitMovement(
@@ -584,7 +780,15 @@ export class TransactionsRepository {
           balance_before,
           balance_after
         )
-        VALUES ($1, $2, 'debit', 'principal', $3, $4, $5)
+        VALUES (
+          $1,
+          $2,
+          'debit',
+          'principal',
+          $3,
+          $4,
+          $5
+        )
       `,
       [
         transactionId,
