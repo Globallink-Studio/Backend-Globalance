@@ -26,6 +26,25 @@ const phoneSchema = z
     "El formato del teléfono no es válido",
   );
 
+const displayCurrencySchema = z.enum(["ARS", "USD", "EUR"]);
+
+const timezoneSchema = z
+  .string()
+  .trim()
+  .min(1, "La zona horaria es obligatoria")
+  .max(64, "La zona horaria no puede superar los 64 caracteres")
+  .refine(
+    (timezone) => {
+      try {
+        Intl.DateTimeFormat(undefined, { timeZone: timezone });
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    { message: "La zona horaria no es válida" },
+  );
+
 const personProfileSchema = z
   .object({
     userType: z.literal("person"),
@@ -42,6 +61,8 @@ const personProfileSchema = z
     document: documentSchema,
     phone: phoneSchema,
     alias: aliasSchema,
+    displayCurrency: displayCurrencySchema,
+    timezone: timezoneSchema.optional(),
   })
   .strict();
 
@@ -56,6 +77,8 @@ const companyProfileSchema = z
     document: documentSchema,
     phone: phoneSchema,
     alias: aliasSchema,
+    displayCurrency: displayCurrencySchema,
+    timezone: timezoneSchema.optional(),
   })
   .strict();
 

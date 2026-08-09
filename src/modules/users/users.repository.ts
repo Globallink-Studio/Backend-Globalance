@@ -61,7 +61,51 @@ export async function updateWalletAlias(
   return rows[0];
 }
 
-export async function createPersonProfile(
+type UpdateDisplayCurrencyParams = {
+  userId: string;
+  displayCurrency: string;
+};
+
+export async function updateUserDisplayCurrency(
+  client: PoolClient,
+  { userId, displayCurrency }: UpdateDisplayCurrencyParams,
+) {
+  const { rows } = await client.query(
+    `
+      UPDATE users
+      SET display_currency = $1
+      WHERE id = $2
+      RETURNING *
+    `,
+    [displayCurrency, userId],
+  );
+
+  return rows[0];
+}
+
+type UpdateUserTimezoneParams = {
+  userId: string;
+  timezone: string;
+};
+
+export async function updateUserTimezone(
+  client: PoolClient,
+  { userId, timezone }: UpdateUserTimezoneParams,
+) {
+  const { rows } = await client.query(
+    `
+      UPDATE users
+      SET timezone = $1
+      WHERE id = $2
+      RETURNING *
+    `,
+    [timezone, userId],
+  );
+
+  return rows[0];
+}
+
+export async function upsertPersonProfile(
   client: PoolClient,
   {
     userId,
@@ -81,6 +125,11 @@ export async function createPersonProfile(
         phone
       )
       VALUES ($1, $2, $3, $4, $5)
+      ON CONFLICT (user_id) DO UPDATE SET
+        first_name = EXCLUDED.first_name,
+        last_name  = EXCLUDED.last_name,
+        document   = EXCLUDED.document,
+        phone      = EXCLUDED.phone
       RETURNING *
     `,
     [userId, firstName, lastName, document, phone],
@@ -89,7 +138,7 @@ export async function createPersonProfile(
   return rows[0];
 }
 
-export async function createCompanyProfile(
+export async function upsertCompanyProfile(
   client: PoolClient,
   {
     userId,
@@ -107,6 +156,10 @@ export async function createCompanyProfile(
         phone
       )
       VALUES ($1, $2, $3, $4)
+      ON CONFLICT (user_id) DO UPDATE SET
+        legal_name = EXCLUDED.legal_name,
+        document   = EXCLUDED.document,
+        phone      = EXCLUDED.phone
       RETURNING *
     `,
     [userId, legalName, document, phone],
@@ -121,6 +174,7 @@ export type UserWithProfile = {
   email: string;
   user_type: "person" | "company" | null;
   display_currency: string;
+  timezone: string;
   status: "active" | "inactive" | "blocked";
   created_at: Date;
   last_access_at: Date | null;
@@ -144,6 +198,7 @@ export async function findUserWithProfileByFirebaseUid(
         u.email,
         u.user_type,
         u.display_currency,
+        u.timezone,
         u.status,
         u.created_at,
         u.last_access_at,
