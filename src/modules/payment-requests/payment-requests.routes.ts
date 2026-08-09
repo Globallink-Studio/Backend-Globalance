@@ -21,4 +21,10 @@ paymentRequestsRouter.patch(
   paymentRequestsController.cancel,
 );
 
+paymentRequestsRouter.post(
+  "/:paymentToken/pay",
+  verifyFirebaseToken,
+  paymentRequestsController.pay,
+);
+
 export { paymentRequestsRouter };

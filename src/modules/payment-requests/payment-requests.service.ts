@@ -6,6 +6,7 @@ import {
   PaymentRequestRecord,
   PaymentRequestsRepository,
 } from "./payment-requests.repository";
+import { TransactionsRepository } from "../transactions/transactions.repository";
 
 export class PaymentRequestsServiceError extends Error {
   constructor(
@@ -27,6 +28,8 @@ export class PaymentRequestsService {
   constructor(
     private readonly paymentRequestsRepository =
       new PaymentRequestsRepository(),
+    private readonly transactionsRepository =
+      new TransactionsRepository(),
   ) {}
 
   async createPaymentRequest(
@@ -197,6 +200,271 @@ export class PaymentRequestsService {
       transactionFinished = true;
 
       return cancelledPaymentRequest;
+    } catch (error) {
+      if (!transactionFinished) {
+        await client.query("ROLLBACK");
+      }
+
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+    async payPaymentRequest(
+    firebaseUid: string,
+    paymentToken: string,
+    idempotencyKey: string,
+  ): Promise<PaymentRequestRecord> {
+    const normalizedIdempotencyKey = idempotencyKey.trim();
+
+    if (
+      normalizedIdempotencyKey.length === 0 ||
+      normalizedIdempotencyKey.length > 100
+    ) {
+      throw new PaymentRequestsServiceError(
+        400,
+        "INVALID_IDEMPOTENCY_KEY",
+        "El encabezado Idempotency-Key es obligatorio y debe tener hasta 100 caracteres",
+      );
+    }
+
+    const client = await pool.connect();
+    let transactionFinished = false;
+
+    try {
+      await client.query("BEGIN");
+
+      const payer = await findUserByFirebaseUid(
+        client,
+        firebaseUid,
+      );
+
+      if (!payer) {
+        throw new PaymentRequestsServiceError(
+          404,
+          "PAYER_NOT_FOUND",
+          "Usuario pagador no encontrado",
+        );
+      }
+
+      if (payer.status !== "active") {
+        throw new PaymentRequestsServiceError(
+          403,
+          "PAYER_INACTIVE",
+          "El usuario pagador no está activo",
+        );
+      }
+
+      const paymentRequest =
+        await this.paymentRequestsRepository
+          .findByTokenForUpdate(
+            client,
+            paymentToken,
+          );
+
+      if (!paymentRequest) {
+        throw new PaymentRequestsServiceError(
+          404,
+          "PAYMENT_REQUEST_NOT_FOUND",
+          "Solicitud de cobro no encontrada",
+        );
+      }
+
+      if (paymentRequest.payer_user_id !== payer.id) {
+        throw new PaymentRequestsServiceError(
+          403,
+          "PAYMENT_REQUEST_FORBIDDEN",
+          "Solo el destinatario puede pagar esta solicitud",
+        );
+      }
+
+      if (paymentRequest.status === "paid") {
+        await client.query("COMMIT");
+        transactionFinished = true;
+        return paymentRequest;
+      }
+
+      if (
+        paymentRequest.status === "pending" &&
+        paymentRequest.expires_at.getTime() <= Date.now()
+      ) {
+        await this.paymentRequestsRepository.markAsExpired(
+          client,
+          paymentRequest.id,
+        );
+
+        await client.query("COMMIT");
+        transactionFinished = true;
+
+        throw new PaymentRequestsServiceError(
+          409,
+          "PAYMENT_REQUEST_EXPIRED",
+          "La solicitud de cobro está vencida",
+        );
+      }
+
+      if (paymentRequest.status !== "pending") {
+        throw new PaymentRequestsServiceError(
+          409,
+          "PAYMENT_REQUEST_NOT_PENDING",
+          "La solicitud de cobro no está disponible para pagar",
+        );
+      }
+
+      const requester =
+        await this.paymentRequestsRepository.findUserById(
+          client,
+          paymentRequest.requester_user_id,
+        );
+
+      if (!requester || requester.status !== "active") {
+        throw new PaymentRequestsServiceError(
+          403,
+          "REQUESTER_INACTIVE",
+          "El usuario que solicitó el cobro no está activo",
+        );
+      }
+
+      const payerWallet =
+        await this.transactionsRepository.findWalletByUserId(
+          client,
+          payer.id,
+        );
+
+      const requesterWallet =
+        await this.transactionsRepository.findWalletByUserId(
+          client,
+          requester.id,
+        );
+
+      if (!payerWallet || payerWallet.status !== "active") {
+        throw new PaymentRequestsServiceError(
+          403,
+          "PAYER_WALLET_UNAVAILABLE",
+          "La billetera del pagador no está disponible",
+        );
+      }
+
+      if (
+        !requesterWallet ||
+        requesterWallet.status !== "active"
+      ) {
+        throw new PaymentRequestsServiceError(
+          403,
+          "REQUESTER_WALLET_UNAVAILABLE",
+          "La billetera del receptor no está disponible",
+        );
+      }
+
+      const balances =
+        await this.transactionsRepository
+          .findTransferBalancesForUpdate(
+            client,
+            [payerWallet.id, requesterWallet.id],
+            paymentRequest.currency_code,
+          );
+
+      const payerBalance = balances.find(
+        (balance) =>
+          balance.wallet_id === payerWallet.id,
+      );
+
+      const requesterBalance = balances.find(
+        (balance) =>
+          balance.wallet_id === requesterWallet.id,
+      );
+
+      if (!payerBalance) {
+        throw new PaymentRequestsServiceError(
+          404,
+          "PAYER_BALANCE_NOT_FOUND",
+          `La billetera pagadora no tiene saldo en ${paymentRequest.currency_code}`,
+        );
+      }
+
+      if (!requesterBalance) {
+        throw new PaymentRequestsServiceError(
+          404,
+          "REQUESTER_BALANCE_NOT_FOUND",
+          `La billetera receptora no tiene saldo en ${paymentRequest.currency_code}`,
+        );
+      }
+
+      const transactionId =
+        await this.transactionsRepository
+          .createTransferTransaction(
+            client,
+            payerWallet.id,
+            normalizedIdempotencyKey,
+          );
+
+      await this.transactionsRepository
+        .createInternalTransferDetail(
+          client,
+          transactionId,
+          requesterWallet.id,
+          paymentRequest.currency_code,
+          paymentRequest.amount,
+        );
+
+      const payerBalanceAfter =
+        await this.transactionsRepository.decreaseBalance(
+          client,
+          payerBalance.id,
+          paymentRequest.amount,
+        );
+
+      if (!payerBalanceAfter) {
+        throw new PaymentRequestsServiceError(
+          400,
+          "INSUFFICIENT_FUNDS",
+          "Saldo insuficiente para pagar la solicitud",
+        );
+      }
+
+      const requesterBalanceAfter =
+        await this.transactionsRepository.increaseBalance(
+          client,
+          requesterBalance.id,
+          paymentRequest.amount,
+        );
+
+      await this.transactionsRepository.createDebitMovement(
+        client,
+        transactionId,
+        payerBalance.id,
+        paymentRequest.amount,
+        payerBalance.amount,
+        payerBalanceAfter,
+      );
+
+      await this.transactionsRepository.createCreditMovement(
+        client,
+        transactionId,
+        requesterBalance.id,
+        paymentRequest.amount,
+        requesterBalance.amount,
+        requesterBalanceAfter,
+      );
+
+      const paidPaymentRequest =
+        await this.paymentRequestsRepository.markAsPaid(
+          client,
+          paymentRequest.id,
+          transactionId,
+        );
+
+      if (!paidPaymentRequest) {
+        throw new Error(
+          "No se pudo confirmar el pago de la solicitud",
+        );
+      }
+
+      await client.query("COMMIT");
+      transactionFinished = true;
+
+      return paidPaymentRequest;
     } catch (error) {
       if (!transactionFinished) {
         await client.query("ROLLBACK");

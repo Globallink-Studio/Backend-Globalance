@@ -31,4 +31,8 @@ export const paymentRequestIdSchema = z
   .string()
   .uuid("El identificador de la solicitud no es válido");
 
+export const paymentRequestTokenSchema = z
+  .string()
+  .uuid("El token de pago no es válido");
+
 export type CreatePaymentRequestInput = z.infer<typeof createPaymentRequestSchema>;

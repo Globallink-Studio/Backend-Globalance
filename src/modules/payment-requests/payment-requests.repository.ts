@@ -176,4 +176,95 @@ export class PaymentRequestsRepository {
 
     return result.rows[0];
   }
+
+    async findUserById(
+    client: PoolClient,
+    userId: string,
+  ): Promise<PaymentRequestUser | null> {
+    const result = await client.query<PaymentRequestUser>(
+      `
+        SELECT
+          id,
+          email,
+          status
+        FROM users
+        WHERE id = $1
+      `,
+      [userId],
+    );
+
+    return result.rows[0] ?? null;
+  }
+
+  async findByTokenForUpdate(
+    client: PoolClient,
+    paymentToken: string,
+  ): Promise<PaymentRequestRecord | null> {
+    const result = await client.query<PaymentRequestRecord>(
+      `
+        SELECT
+          pr.id,
+          pr.payment_token,
+          pr.requester_user_id,
+          pr.payer_user_id,
+          payer.email AS payer_email,
+          pr.currency_code,
+          pr.amount,
+          pr.status,
+          pr.paid_transaction_id,
+          pr.created_at,
+          pr.updated_at,
+          pr.expires_at,
+          pr.paid_at,
+          pr.cancelled_at
+        FROM payment_requests AS pr
+        INNER JOIN users AS payer
+          ON payer.id = pr.payer_user_id
+        WHERE pr.payment_token = $1
+        FOR UPDATE OF pr
+      `,
+      [paymentToken],
+    );
+
+    return result.rows[0] ?? null;
+  }
+
+  async markAsPaid(
+    client: PoolClient,
+    paymentRequestId: string,
+    transactionId: string,
+  ): Promise<PaymentRequestRecord> {
+    const result = await client.query<PaymentRequestRecord>(
+      `
+        UPDATE payment_requests AS pr
+        SET
+          status = 'paid',
+          paid_transaction_id = $2,
+          paid_at = CURRENT_TIMESTAMP,
+          updated_at = CURRENT_TIMESTAMP
+        FROM users AS payer
+        WHERE pr.id = $1
+          AND pr.payer_user_id = payer.id
+          AND pr.status = 'pending'
+        RETURNING
+          pr.id,
+          pr.payment_token,
+          pr.requester_user_id,
+          pr.payer_user_id,
+          payer.email AS payer_email,
+          pr.currency_code,
+          pr.amount,
+          pr.status,
+          pr.paid_transaction_id,
+          pr.created_at,
+          pr.updated_at,
+          pr.expires_at,
+          pr.paid_at,
+          pr.cancelled_at
+      `,
+      [paymentRequestId, transactionId],
+    );
+
+    return result.rows[0];
+  }
 }
