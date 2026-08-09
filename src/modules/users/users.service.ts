@@ -6,6 +6,7 @@ import {
   upsertCompanyProfile,
   upsertPersonProfile,
   updateUserDisplayCurrency,
+  updateUserTimezone,
   updateUserType,
   updateWalletAlias,
   UserType,
@@ -19,6 +20,7 @@ type CompletePersonProfile = {
   phone: string;
   alias: string;
   displayCurrency: "ARS" | "USD" | "EUR";
+  timezone?: string;
 };
 
 type CompleteCompanyProfile = {
@@ -28,6 +30,7 @@ type CompleteCompanyProfile = {
   phone: string;
   alias: string;
   displayCurrency: "ARS" | "USD" | "EUR";
+  timezone?: string;
 };
 
 export type CompleteProfileParams =
@@ -78,6 +81,13 @@ export async function completeProfile(
       userId: user.id,
       displayCurrency: profile.displayCurrency,
     });
+
+    if (profile.timezone) {
+      await updateUserTimezone(client, {
+        userId: user.id,
+        timezone: profile.timezone,
+      });
+    }
 
     if (profile.userType === "person") {
       await upsertPersonProfile(client, {

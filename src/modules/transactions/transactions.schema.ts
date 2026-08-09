@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { DEMO_FUNDING_LIMITS } from "../../config/demo-funding";
 
-const amountSchema = z
+export const amountSchema = z
   .string()
   .trim()
   .regex(
@@ -11,6 +11,27 @@ const amountSchema = z
   .refine((amount) => Number(amount) > 0, {
     message: "El monto debe ser mayor que cero",
   });
+
+const currencySchema = z.enum(["ARS", "USD", "EUR"]);
+
+export const exchangeSchema = z
+  .object({
+    sourceCurrency: currencySchema,
+    targetCurrency: currencySchema,
+    sourceAmount: amountSchema,
+  })
+  .superRefine(({ sourceCurrency, targetCurrency }, context) => {
+    if (sourceCurrency === targetCurrency) {
+      context.addIssue({
+        code: "custom",
+        path: ["targetCurrency"],
+        message:
+          "La moneda de destino debe ser distinta de la de origen",
+      });
+    }
+  });
+
+export type ExchangeInput = z.infer<typeof exchangeSchema>;
 
 export const demoFundingSchema = z
   .object({

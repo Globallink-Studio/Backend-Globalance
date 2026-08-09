@@ -15,6 +15,7 @@ export const env = {
   DATABASE_URL: required("DATABASE_URL"),
   FRONTEND_URL: process.env.FRONTEND_URL ?? "http://localhost:5173",
   DEMO_FUNDING_ENABLED: process.env.DEMO_FUNDING_ENABLED === "true",
+  EXCHANGE_RATE_API_KEY: process.env.EXCHANGE_RATE_API_KEY ?? "",
 
   FIREBASE_PROJECT_ID: required("FIREBASE_PROJECT_ID"),
   FIREBASE_CLIENT_EMAIL: required("FIREBASE_CLIENT_EMAIL"),

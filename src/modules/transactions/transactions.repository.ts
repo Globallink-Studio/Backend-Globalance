@@ -57,6 +57,24 @@ export interface TransactionCount {
   total: number;
 }
 
+export interface ExchangeRecord {
+  transaction_id: string;
+  type: "purchase" | "sale" | "conversion";
+  status: string;
+  description: string | null;
+  created_at: Date;
+  completed_at: Date | null;
+  source_currency: string;
+  target_currency: string;
+  source_amount: string;
+  target_amount: string;
+  applied_rate: string;
+  rate_provider: string;
+  rate_fetched_at: Date;
+  source_balance_after: string;
+  target_balance_after: string;
+}
+
 export class TransactionsRepository {
   async findWalletByUserId(
     client: PoolClient,
@@ -305,6 +323,7 @@ export class TransactionsRepository {
     async countMonthlyTransactions(
     client: PoolClient,
     walletId: string,
+    timezone = "America/Argentina/Buenos_Aires",
   ): Promise<number> {
     const result = await client.query<TransactionCount>(
       `
@@ -312,26 +331,18 @@ export class TransactionsRepository {
         FROM transactions
         WHERE wallet_id = $1
           AND created_at >= (
-            date_trunc(
-              'month',
-              CURRENT_TIMESTAMP AT TIME ZONE
-                'America/Argentina/Buenos_Aires'
-            )
-            AT TIME ZONE 'America/Argentina/Buenos_Aires'
+            date_trunc('month', CURRENT_TIMESTAMP AT TIME ZONE $2)
+            AT TIME ZONE $2
           )
           AND created_at < (
             (
-              date_trunc(
-                'month',
-                CURRENT_TIMESTAMP AT TIME ZONE
-                  'America/Argentina/Buenos_Aires'
-              )
+              date_trunc('month', CURRENT_TIMESTAMP AT TIME ZONE $2)
               + INTERVAL '1 month'
             )
-            AT TIME ZONE 'America/Argentina/Buenos_Aires'
+            AT TIME ZONE $2
           )
       `,
-      [walletId],
+      [walletId, timezone],
     );
 
     return result.rows[0].total;
@@ -340,6 +351,7 @@ export class TransactionsRepository {
     async countDailyCompletedConversions(
     client: PoolClient,
     walletId: string,
+    timezone = "America/Argentina/Buenos_Aires",
   ): Promise<number> {
     const result = await client.query<TransactionCount>(
       `
@@ -349,28 +361,238 @@ export class TransactionsRepository {
           AND type = 'conversion'
           AND status = 'completed'
           AND completed_at >= (
-            date_trunc(
-              'day',
-              CURRENT_TIMESTAMP AT TIME ZONE
-                'America/Argentina/Buenos_Aires'
-            )
-            AT TIME ZONE 'America/Argentina/Buenos_Aires'
+            date_trunc('day', CURRENT_TIMESTAMP AT TIME ZONE $2)
+            AT TIME ZONE $2
           )
           AND completed_at < (
             (
-              date_trunc(
-                'day',
-                CURRENT_TIMESTAMP AT TIME ZONE
-                  'America/Argentina/Buenos_Aires'
-              )
+              date_trunc('day', CURRENT_TIMESTAMP AT TIME ZONE $2)
               + INTERVAL '1 day'
             )
-            AT TIME ZONE 'America/Argentina/Buenos_Aires'
+            AT TIME ZONE $2
           )
       `,
-      [walletId],
+      [walletId, timezone],
     );
 
     return result.rows[0].total;
+  }
+
+    async findExchangeByIdempotencyKey(
+    client: PoolClient,
+    idempotencyKey: string,
+    walletId: string,
+  ): Promise<ExchangeRecord | null> {
+    const result = await client.query<ExchangeRecord>(
+      `
+        SELECT
+          t.id AS transaction_id,
+          t.type,
+          t.status,
+          t.description,
+          t.created_at,
+          t.completed_at,
+          c.source_currency,
+          c.target_currency,
+          c.source_amount,
+          c.target_amount,
+          c.applied_rate,
+          c.rate_provider,
+          c.rate_fetched_at,
+          MAX(m.balance_after)
+            FILTER (WHERE b.currency_code = c.source_currency)
+              AS source_balance_after,
+          MAX(m.balance_after)
+            FILTER (WHERE b.currency_code = c.target_currency)
+              AS target_balance_after
+        FROM transactions AS t
+        INNER JOIN conversions AS c
+          ON c.transaction_id = t.id
+        INNER JOIN movements AS m
+          ON m.transaction_id = t.id
+        INNER JOIN balances AS b
+          ON b.id = m.balance_id
+        WHERE t.idempotency_key = $1
+          AND t.wallet_id = $2
+          AND t.type IN ('purchase', 'sale', 'conversion')
+        GROUP BY
+          t.id,
+          t.type,
+          t.status,
+          t.description,
+          t.created_at,
+          t.completed_at,
+          c.source_currency,
+          c.target_currency,
+          c.source_amount,
+          c.target_amount,
+          c.applied_rate,
+          c.rate_provider,
+          c.rate_fetched_at
+      `,
+      [idempotencyKey, walletId],
+    );
+
+    return result.rows[0] ?? null;
+  }
+
+    async countDailyExchangeOperations(
+    client: PoolClient,
+    walletId: string,
+    timezone = "America/Argentina/Buenos_Aires",
+  ): Promise<number> {
+    const result = await client.query<TransactionCount>(
+      `
+        SELECT COUNT(*)::integer AS total
+        FROM transactions
+        WHERE wallet_id = $1
+          AND type IN ('purchase', 'sale', 'conversion')
+          AND status = 'completed'
+          AND completed_at >= (
+            date_trunc('day', CURRENT_TIMESTAMP AT TIME ZONE $2)
+            AT TIME ZONE $2
+          )
+          AND completed_at < (
+            (
+              date_trunc('day', CURRENT_TIMESTAMP AT TIME ZONE $2)
+              + INTERVAL '1 day'
+            )
+            AT TIME ZONE $2
+          )
+      `,
+      [walletId, timezone],
+    );
+
+    return result.rows[0].total;
+  }
+
+    async createExchangeTransaction(
+    client: PoolClient,
+    walletId: string,
+    idempotencyKey: string,
+    type: "purchase" | "sale" | "conversion",
+    description: string,
+  ): Promise<string> {
+    const result = await client.query<{ id: string }>(
+      `
+        INSERT INTO transactions (
+          wallet_id,
+          type,
+          status,
+          description,
+          idempotency_key,
+          completed_at
+        )
+        VALUES ($1, $2, 'completed', $3, $4, CURRENT_TIMESTAMP)
+        RETURNING id
+      `,
+      [walletId, type, description, idempotencyKey],
+    );
+
+    return result.rows[0].id;
+  }
+
+    async createConversion(
+    client: PoolClient,
+    transactionId: string,
+    sourceCurrency: string,
+    targetCurrency: string,
+    sourceAmount: string,
+    appliedRate: string,
+    rateProvider: string,
+    rateFetchedAt: Date,
+  ): Promise<string> {
+    const result = await client.query<{ target_amount: string }>(
+      `
+        INSERT INTO conversions (
+          transaction_id,
+          source_currency,
+          target_currency,
+          source_amount,
+          target_amount,
+          applied_rate,
+          rate_provider,
+          rate_fetched_at
+        )
+        VALUES (
+          $1,
+          $2,
+          $3,
+          $4,
+          ROUND($4::numeric * $5, 8),
+          $5,
+          $6,
+          $7
+        )
+        RETURNING target_amount
+      `,
+      [
+        transactionId,
+        sourceCurrency,
+        targetCurrency,
+        sourceAmount,
+        appliedRate,
+        rateProvider,
+        rateFetchedAt,
+      ],
+    );
+
+    return result.rows[0].target_amount;
+  }
+
+    async decreaseBalance(
+    client: PoolClient,
+    balanceId: string,
+    amount: string,
+  ): Promise<string> {
+    const result = await client.query<{ amount: string }>(
+      `
+        UPDATE balances
+        SET
+          amount = amount - $2::numeric,
+          updated_at = CURRENT_TIMESTAMP
+        WHERE id = $1
+          AND amount >= $2::numeric
+        RETURNING amount
+      `,
+      [balanceId, amount],
+    );
+
+    if (!result.rows[0]) {
+      throw new Error("Saldo insuficiente al debitar el balance");
+    }
+
+    return result.rows[0].amount;
+  }
+
+    async createDebitMovement(
+    client: PoolClient,
+    transactionId: string,
+    balanceId: string,
+    amount: string,
+    balanceBefore: string,
+    balanceAfter: string,
+  ): Promise<void> {
+    await client.query(
+      `
+        INSERT INTO movements (
+          transaction_id,
+          balance_id,
+          direction,
+          concept,
+          amount,
+          balance_before,
+          balance_after
+        )
+        VALUES ($1, $2, 'debit', 'principal', $3, $4, $5)
+      `,
+      [
+        transactionId,
+        balanceId,
+        amount,
+        balanceBefore,
+        balanceAfter,
+      ],
+    );
   }
 }

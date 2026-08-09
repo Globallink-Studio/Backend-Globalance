@@ -83,6 +83,28 @@ export async function updateUserDisplayCurrency(
   return rows[0];
 }
 
+type UpdateUserTimezoneParams = {
+  userId: string;
+  timezone: string;
+};
+
+export async function updateUserTimezone(
+  client: PoolClient,
+  { userId, timezone }: UpdateUserTimezoneParams,
+) {
+  const { rows } = await client.query(
+    `
+      UPDATE users
+      SET timezone = $1
+      WHERE id = $2
+      RETURNING *
+    `,
+    [timezone, userId],
+  );
+
+  return rows[0];
+}
+
 export async function upsertPersonProfile(
   client: PoolClient,
   {
@@ -152,6 +174,7 @@ export type UserWithProfile = {
   email: string;
   user_type: "person" | "company" | null;
   display_currency: string;
+  timezone: string;
   status: "active" | "inactive" | "blocked";
   created_at: Date;
   last_access_at: Date | null;
@@ -175,6 +198,7 @@ export async function findUserWithProfileByFirebaseUid(
         u.email,
         u.user_type,
         u.display_currency,
+        u.timezone,
         u.status,
         u.created_at,
         u.last_access_at,
