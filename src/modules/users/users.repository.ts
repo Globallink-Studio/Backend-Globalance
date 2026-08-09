@@ -61,7 +61,29 @@ export async function updateWalletAlias(
   return rows[0];
 }
 
-export async function createPersonProfile(
+type UpdateDisplayCurrencyParams = {
+  userId: string;
+  displayCurrency: string;
+};
+
+export async function updateUserDisplayCurrency(
+  client: PoolClient,
+  { userId, displayCurrency }: UpdateDisplayCurrencyParams,
+) {
+  const { rows } = await client.query(
+    `
+      UPDATE users
+      SET display_currency = $1
+      WHERE id = $2
+      RETURNING *
+    `,
+    [displayCurrency, userId],
+  );
+
+  return rows[0];
+}
+
+export async function upsertPersonProfile(
   client: PoolClient,
   {
     userId,
@@ -81,6 +103,11 @@ export async function createPersonProfile(
         phone
       )
       VALUES ($1, $2, $3, $4, $5)
+      ON CONFLICT (user_id) DO UPDATE SET
+        first_name = EXCLUDED.first_name,
+        last_name  = EXCLUDED.last_name,
+        document   = EXCLUDED.document,
+        phone      = EXCLUDED.phone
       RETURNING *
     `,
     [userId, firstName, lastName, document, phone],
@@ -89,7 +116,7 @@ export async function createPersonProfile(
   return rows[0];
 }
 
-export async function createCompanyProfile(
+export async function upsertCompanyProfile(
   client: PoolClient,
   {
     userId,
@@ -107,6 +134,10 @@ export async function createCompanyProfile(
         phone
       )
       VALUES ($1, $2, $3, $4)
+      ON CONFLICT (user_id) DO UPDATE SET
+        legal_name = EXCLUDED.legal_name,
+        document   = EXCLUDED.document,
+        phone      = EXCLUDED.phone
       RETURNING *
     `,
     [userId, legalName, document, phone],

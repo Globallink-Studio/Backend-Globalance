@@ -223,8 +223,11 @@ paths:
     patch:
       tags:
         - Users
-      summary: Completar el perfil del usuario
-      description: Define si la cuenta es personal o empresarial y registra sus datos.
+      summary: Crear o editar el perfil del usuario
+      description: >
+        Crea el perfil personal o empresarial si no existe y lo actualiza si ya
+        existe (upsert). Incluye la moneda principal (displayCurrency), que define
+        cómo se presentan las operaciones de compra y venta.
       security:
         - bearerAuth: []
       requestBody:
@@ -237,7 +240,7 @@ paths:
                 - $ref: "#/components/schemas/CompanyProfileInput"
       responses:
         "200":
-          description: Perfil completado correctamente
+          description: Perfil creado o actualizado correctamente
           content:
             application/json:
               schema:
@@ -257,6 +260,20 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
         "401":
           description: Token ausente, inválido o vencido
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Usuario no encontrado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: >
+            Conflicto con el estado del recurso: alias o documento duplicado,
+            o intento de modificar el tipo de usuario (USER_TYPE_NOT_EDITABLE).
           content:
             application/json:
               schema:
@@ -414,6 +431,7 @@ components:
         - document
         - phone
         - alias
+        - displayCurrency
       properties:
         userType:
           type: string
@@ -445,6 +463,14 @@ components:
           maxLength: 30
           pattern: "^[a-z0-9.-]+$"
           example: jazmin.globalance
+        displayCurrency:
+          type: string
+          enum:
+            - ARS
+            - USD
+            - EUR
+          example: ARS
+          description: Moneda principal de la wallet. Determina cómo se clasifican las operaciones de compra y venta.
       additionalProperties: false
 
     CompanyProfileInput:
@@ -455,6 +481,7 @@ components:
         - document
         - phone
         - alias
+        - displayCurrency
       properties:
         userType:
           type: string
@@ -481,6 +508,14 @@ components:
           maxLength: 30
           pattern: "^[a-z0-9.-]+$"
           example: globalance.empresa
+        displayCurrency:
+          type: string
+          enum:
+            - ARS
+            - USD
+            - EUR
+          example: ARS
+          description: Moneda principal de la wallet. Determina cómo se clasifican las operaciones de compra y venta.
       additionalProperties: false
 
     Balance:

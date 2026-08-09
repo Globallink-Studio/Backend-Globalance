@@ -26,6 +26,8 @@ const phoneSchema = z
     "El formato del teléfono no es válido",
   );
 
+const displayCurrencySchema = z.enum(["ARS", "USD", "EUR"]);
+
 const personProfileSchema = z
   .object({
     userType: z.literal("person"),
@@ -42,6 +44,7 @@ const personProfileSchema = z
     document: documentSchema,
     phone: phoneSchema,
     alias: aliasSchema,
+    displayCurrency: displayCurrencySchema,
   })
   .strict();
 
@@ -56,6 +59,7 @@ const companyProfileSchema = z
     document: documentSchema,
     phone: phoneSchema,
     alias: aliasSchema,
+    displayCurrency: displayCurrencySchema,
   })
   .strict();
 

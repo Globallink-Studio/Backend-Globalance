@@ -1,4 +1,5 @@
 import { pool } from "../../db/pool";
+import { AppError } from "../../errors/app-error";
 import {
   findUserWithProfileByFirebaseUid,
   UserWithProfile,
@@ -41,21 +42,37 @@ export class WalletService {
         await findUserWithProfileByFirebaseUid(client, firebaseUid);
 
       if (!user) {
-        throw new Error("Usuario no encontrado");
+        throw new AppError(
+          404,
+          "USER_NOT_FOUND",
+          "Usuario no encontrado.",
+        );
       }
 
       if (user.status !== "active") {
-        throw new Error("El usuario no está activo");
+        throw new AppError(
+          403,
+          "USER_INACTIVE",
+          "El usuario no está activo.",
+        );
       }
 
       const wallet = await this.walletRepository.findByUserId(user.id);
 
       if (!wallet) {
-        throw new Error("Billetera no encontrada");
+        throw new AppError(
+          404,
+          "WALLET_NOT_FOUND",
+          "Billetera no encontrada.",
+        );
       }
 
       if (wallet.status !== "active") {
-        throw new Error("La billetera no está activa");
+        throw new AppError(
+          403,
+          "WALLET_INACTIVE",
+          "La billetera no está activa.",
+        );
       }
 
       const balances =

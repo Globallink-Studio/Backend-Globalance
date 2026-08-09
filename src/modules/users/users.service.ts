@@ -1,9 +1,11 @@
 import { pool } from "../../db/pool";
+import { AppError } from "../../errors/app-error";
 import { findUserByFirebaseUid } from "../auth/auth.repository";
 import {
   findUserWithProfileByFirebaseUid,
-  createCompanyProfile,
-  createPersonProfile,
+  upsertCompanyProfile,
+  upsertPersonProfile,
+  updateUserDisplayCurrency,
   updateUserType,
   updateWalletAlias,
   UserType,
@@ -16,6 +18,7 @@ type CompletePersonProfile = {
   document: string;
   phone: string;
   alias: string;
+  displayCurrency: "ARS" | "USD" | "EUR";
 };
 
 type CompleteCompanyProfile = {
@@ -24,6 +27,7 @@ type CompleteCompanyProfile = {
   document: string;
   phone: string;
   alias: string;
+  displayCurrency: "ARS" | "USD" | "EUR";
 };
 
 export type CompleteProfileParams =
@@ -42,7 +46,22 @@ export async function completeProfile(
     const user = await findUserByFirebaseUid(client, firebaseUid);
 
     if (!user) {
-      throw new Error("Usuario no encontrado.");
+      throw new AppError(
+        404,
+        "USER_NOT_FOUND",
+        "Usuario no encontrado.",
+      );
+    }
+
+    if (
+      user.user_type &&
+      user.user_type !== profile.userType
+    ) {
+      throw new AppError(
+        409,
+        "USER_TYPE_NOT_EDITABLE",
+        "El tipo de usuario no puede modificarse.",
+      );
     }
 
     await updateUserType(client, {
@@ -55,8 +74,13 @@ export async function completeProfile(
       alias: profile.alias,
     });
 
+    await updateUserDisplayCurrency(client, {
+      userId: user.id,
+      displayCurrency: profile.displayCurrency,
+    });
+
     if (profile.userType === "person") {
-      await createPersonProfile(client, {
+      await upsertPersonProfile(client, {
         userId: user.id,
         firstName: profile.firstName,
         lastName: profile.lastName,
@@ -64,7 +88,7 @@ export async function completeProfile(
         phone: profile.phone,
       });
     } else {
-      await createCompanyProfile(client, {
+      await upsertCompanyProfile(client, {
         userId: user.id,
         legalName: profile.legalName,
         document: profile.document,
@@ -95,7 +119,11 @@ export async function getProfile(firebaseUid: string) {
     );
 
     if (!profile) {
-      throw new Error("Usuario no encontrado");
+      throw new AppError(
+        404,
+        "USER_NOT_FOUND",
+        "Usuario no encontrado.",
+      );
     }
 
     return profile;

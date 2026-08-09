@@ -12,6 +12,15 @@ export type User = {
   last_access_at: Date | null;
 };
 
+export type Wallet = {
+  id: string;
+  user_id: string;
+  alias: string;
+  account_number: string;
+  status: "active" | "inactive" | "blocked";
+  created_at: Date;
+};
+
 type CreateUserParams = {
   firebaseUid: string;
   email: string;
@@ -33,21 +42,26 @@ export async function findUserByFirebaseUid(
   return rows[0] ?? null;
 }
 
-export async function updateLastAccess(
+export async function findWalletByUserId(
   client: PoolClient,
-  firebaseUid: string,
-): Promise<User> {
-  const { rows } = await client.query<User>(
+  userId: string,
+): Promise<Wallet | null> {
+  const { rows } = await client.query<Wallet>(
     `
-      UPDATE users
-      SET last_access_at = CURRENT_TIMESTAMP
-      WHERE firebase_uid = $1
-      RETURNING *
+      SELECT
+        id,
+        user_id,
+        alias,
+        account_number,
+        status,
+        created_at
+      FROM wallets
+      WHERE user_id = $1
     `,
-    [firebaseUid],
+    [userId],
   );
 
-  return rows[0];
+  return rows[0] ?? null;
 }
 
 export async function createUser(
@@ -58,10 +72,9 @@ export async function createUser(
     `
       INSERT INTO users (
         firebase_uid,
-        email,
-        last_access_at
+        email
       )
-      VALUES ($1, $2, CURRENT_TIMESTAMP)
+      VALUES ($1, $2)
       RETURNING *
     `,
     [firebaseUid, email],
