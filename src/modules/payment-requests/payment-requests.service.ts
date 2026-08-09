@@ -1,8 +1,12 @@
 import { env } from "../../config/env";
 import { pool } from "../../db/pool";
 import { findUserByFirebaseUid } from "../auth/auth.repository";
-import type { CreatePaymentRequestInput } from "./payment-requests.schema";
+import type {
+  CreatePaymentRequestInput,
+  ListPaymentRequestsQuery,
+} from "./payment-requests.schema";
 import {
+  PaymentRequestListItem,
   PaymentRequestRecord,
   PaymentRequestsRepository,
 } from "./payment-requests.repository";
@@ -568,6 +572,54 @@ export class PaymentRequestsService {
         ...currentPaymentRequest,
         requester_email: requester.email,
       };
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+    async listPaymentRequests(
+    firebaseUid: string,
+    query: ListPaymentRequestsQuery,
+  ): Promise<PaymentRequestListItem[]> {
+    const client = await pool.connect();
+
+    try {
+      await client.query("BEGIN");
+
+      const user = await findUserByFirebaseUid(
+        client,
+        firebaseUid,
+      );
+
+      if (!user) {
+        throw new PaymentRequestsServiceError(
+          404,
+          "USER_NOT_FOUND",
+          "Usuario no encontrado",
+        );
+      }
+
+      await this.paymentRequestsRepository.markExpiredForUser(
+        client,
+        user.id,
+      );
+
+      const paymentRequests =
+        await this.paymentRequestsRepository.listByUser(
+          client,
+          user.id,
+          query.scope,
+          query.status,
+          query.limit,
+          query.offset,
+        );
+
+      await client.query("COMMIT");
+
+      return paymentRequests;
     } catch (error) {
       await client.query("ROLLBACK");
       throw error;

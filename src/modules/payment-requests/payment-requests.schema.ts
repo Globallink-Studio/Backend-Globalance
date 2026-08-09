@@ -35,4 +35,33 @@ export const paymentRequestTokenSchema = z
   .string()
   .uuid("El token de pago no es válido");
 
+export const listPaymentRequestsQuerySchema = z
+  .object({
+    scope: z.enum(["sent", "received"]),
+
+    status: z
+      .enum([
+        "pending",
+        "paid",
+        "expired",
+        "cancelled",
+      ])
+      .optional(),
+
+    limit: z.coerce
+      .number()
+      .int()
+      .min(1)
+      .max(100)
+      .default(20),
+
+    offset: z.coerce
+      .number()
+      .int()
+      .min(0)
+      .default(0),
+  })
+  .strict();
+
 export type CreatePaymentRequestInput = z.infer<typeof createPaymentRequestSchema>;
+export type ListPaymentRequestsQuery = z.infer<typeof listPaymentRequestsQuerySchema>;

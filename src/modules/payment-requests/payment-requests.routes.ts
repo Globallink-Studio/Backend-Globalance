@@ -33,4 +33,10 @@ paymentRequestsRouter.post(
   paymentRequestsController.pay,
 );
 
+paymentRequestsRouter.get(
+  "/",
+  verifyFirebaseToken,
+  paymentRequestsController.list,
+);
+
 export { paymentRequestsRouter };

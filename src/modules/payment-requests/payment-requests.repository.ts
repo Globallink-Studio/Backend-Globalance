@@ -23,6 +23,11 @@ export interface PaymentRequestRecord {
   cancelled_at: Date | null;
 }
 
+export interface PaymentRequestListItem
+  extends PaymentRequestRecord {
+  requester_email: string;
+}
+
 export class PaymentRequestsRepository {
   async findUserByEmail(
     client: PoolClient,
@@ -266,5 +271,83 @@ export class PaymentRequestsRepository {
     );
 
     return result.rows[0];
+  }
+
+    async markExpiredForUser(
+    client: PoolClient,
+    userId: string,
+  ): Promise<void> {
+    await client.query(
+      `
+        UPDATE payment_requests
+        SET
+          status = 'expired',
+          updated_at = CURRENT_TIMESTAMP
+        WHERE status = 'pending'
+          AND expires_at <= CURRENT_TIMESTAMP
+          AND (
+            requester_user_id = $1
+            OR payer_user_id = $1
+          )
+      `,
+      [userId],
+    );
+  }
+
+  async listByUser(
+    client: PoolClient,
+    userId: string,
+    scope: "sent" | "received",
+    status: string | undefined,
+    limit: number,
+    offset: number,
+  ): Promise<PaymentRequestListItem[]> {
+    const userColumn =
+      scope === "sent"
+        ? "requester_user_id"
+        : "payer_user_id";
+
+    const result =
+      await client.query<PaymentRequestListItem>(
+        `
+          SELECT
+            pr.id,
+            pr.payment_token,
+            pr.requester_user_id,
+            requester.email AS requester_email,
+            pr.payer_user_id,
+            payer.email AS payer_email,
+            pr.currency_code,
+            pr.amount,
+            pr.status,
+            pr.paid_transaction_id,
+            pr.created_at,
+            pr.updated_at,
+            pr.expires_at,
+            pr.paid_at,
+            pr.cancelled_at
+          FROM payment_requests AS pr
+          INNER JOIN users AS requester
+            ON requester.id = pr.requester_user_id
+          INNER JOIN users AS payer
+            ON payer.id = pr.payer_user_id
+          WHERE pr.${userColumn} = $1
+            AND (
+              $2::varchar IS NULL
+              OR pr.status = $2
+            )
+          ORDER BY pr.created_at DESC
+          LIMIT $3
+          OFFSET $4
+        `,
+        [
+          userId,
+          status ?? null,
+          limit,
+          offset,
+        ],
+      );
+
+    return result.rows;
   }
 }
