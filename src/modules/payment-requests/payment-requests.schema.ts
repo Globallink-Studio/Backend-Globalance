@@ -15,11 +15,14 @@ const amountSchema = z
 export const createPaymentRequestSchema = z
   .object({
     payerEmail: z
-      .string()
-      .trim()
+  .string()
+  .trim()
+  .pipe(
+    z
       .email("El correo del pagador no es válido")
-      .max(254)
-      .transform((value) => value.toLowerCase()),
+      .max(254),
+  )
+  .transform((value) => value.toLowerCase()),
 
     currency: z.enum(["ARS", "USD", "EUR"]),
 
@@ -27,13 +30,13 @@ export const createPaymentRequestSchema = z
   })
   .strict();
 
-export const paymentRequestIdSchema = z
-  .string()
-  .uuid("El identificador de la solicitud no es válido");
+export const paymentRequestIdSchema = z.uuid(
+  "El identificador de la solicitud no es válido",
+);
 
-export const paymentRequestTokenSchema = z
-  .string()
-  .uuid("El token de pago no es válido");
+export const paymentRequestTokenSchema = z.uuid(
+  "El token de pago no es válido",
+);
 
 export const listPaymentRequestsQuerySchema = z
   .object({
