@@ -24,6 +24,11 @@ export interface CreatedPaymentRequest
   payment_url: string;
 }
 
+export interface PaymentRequestDetails
+  extends PaymentRequestRecord {
+  requester_email: string;
+}
+
 export class PaymentRequestsService {
   constructor(
     private readonly paymentRequestsRepository =
@@ -470,6 +475,101 @@ export class PaymentRequestsService {
         await client.query("ROLLBACK");
       }
 
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+    async getPaymentRequestByToken(
+    firebaseUid: string,
+    paymentToken: string,
+  ): Promise<PaymentRequestDetails> {
+    const client = await pool.connect();
+
+    try {
+      await client.query("BEGIN");
+
+      const viewer = await findUserByFirebaseUid(
+        client,
+        firebaseUid,
+      );
+
+      if (!viewer) {
+        throw new PaymentRequestsServiceError(
+          404,
+          "USER_NOT_FOUND",
+          "Usuario no encontrado",
+        );
+      }
+
+      const paymentRequest =
+        await this.paymentRequestsRepository
+          .findByTokenForUpdate(
+            client,
+            paymentToken,
+          );
+
+      if (!paymentRequest) {
+        throw new PaymentRequestsServiceError(
+          404,
+          "PAYMENT_REQUEST_NOT_FOUND",
+          "Solicitud de cobro no encontrada",
+        );
+      }
+
+      const canView =
+        paymentRequest.requester_user_id === viewer.id ||
+        paymentRequest.payer_user_id === viewer.id;
+
+      if (!canView) {
+        throw new PaymentRequestsServiceError(
+          403,
+          "PAYMENT_REQUEST_FORBIDDEN",
+          "No tenés permiso para consultar esta solicitud",
+        );
+      }
+
+      const requester =
+        await this.paymentRequestsRepository.findUserById(
+          client,
+          paymentRequest.requester_user_id,
+        );
+
+      if (!requester) {
+        throw new PaymentRequestsServiceError(
+          404,
+          "REQUESTER_NOT_FOUND",
+          "Usuario solicitante no encontrado",
+        );
+      }
+
+      let currentPaymentRequest = paymentRequest;
+
+      if (
+        paymentRequest.status === "pending" &&
+        paymentRequest.expires_at.getTime() <= Date.now()
+      ) {
+        await this.paymentRequestsRepository.markAsExpired(
+          client,
+          paymentRequest.id,
+        );
+
+        currentPaymentRequest = {
+          ...paymentRequest,
+          status: "expired",
+          updated_at: new Date(),
+        };
+      }
+
+      await client.query("COMMIT");
+
+      return {
+        ...currentPaymentRequest,
+        requester_email: requester.email,
+      };
+    } catch (error) {
+      await client.query("ROLLBACK");
       throw error;
     } finally {
       client.release();

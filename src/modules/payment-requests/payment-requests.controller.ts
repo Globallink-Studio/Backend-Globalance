@@ -194,4 +194,62 @@ export class PaymentRequestsController {
       next(error);
     }
   };
+
+    getByToken = async (
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ): Promise<void> => {
+    try {
+      const firebaseUid = req.user?.uid;
+
+      if (!firebaseUid) {
+        res.status(401).json({
+          error: {
+            code: "UNAUTHENTICATED",
+            message: "Usuario no autenticado",
+          },
+        });
+        return;
+      }
+
+      const tokenResult =
+        paymentRequestTokenSchema.safeParse(
+          req.params.paymentToken,
+        );
+
+      if (!tokenResult.success) {
+        res.status(400).json({
+          error: {
+            code: "INVALID_PAYMENT_TOKEN",
+            message: "El token de pago no es válido",
+          },
+        });
+        return;
+      }
+
+      const paymentRequest =
+        await this.paymentRequestsService
+          .getPaymentRequestByToken(
+            firebaseUid,
+            tokenResult.data,
+          );
+
+      res.status(200).json({
+        paymentRequest,
+      });
+    } catch (error) {
+      if (error instanceof PaymentRequestsServiceError) {
+        res.status(error.statusCode).json({
+          error: {
+            code: error.code,
+            message: error.message,
+          },
+        });
+        return;
+      }
+
+      next(error);
+    }
+  };
 }
