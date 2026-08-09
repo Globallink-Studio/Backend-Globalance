@@ -32,4 +32,10 @@ transactionsRouter.post(
   transactionsController.createInternalTransfer,
 );
 
+transactionsRouter.get(
+  "/",
+  verifyFirebaseToken,
+  transactionsController.listTransactions,
+);
+
 export { transactionsRouter };

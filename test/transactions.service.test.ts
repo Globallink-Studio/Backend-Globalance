@@ -25,13 +25,11 @@ vi.mock("../src/modules/exchange/rate-provider", () => ({
 }));
 
 import { pool } from "../src/db/pool";
+import { TransactionsServiceError } from "../src/errors/service-errors";
 import { findUserByFirebaseUid } from "../src/modules/auth/auth.repository";
 import { RateProvider } from "../src/modules/exchange/rate-provider";
 import { TransactionsRepository } from "../src/modules/transactions/transactions.repository";
-import {
-  TransactionsService,
-  TransactionsServiceError,
-} from "../src/modules/transactions/transactions.service";
+import { TransactionsService } from "../src/modules/transactions/transactions.service";
 
 function createRepositoryMock() {
   return {
@@ -45,6 +43,7 @@ function createRepositoryMock() {
     createDebitMovement: vi.fn(),
     increaseBalance: vi.fn(),
     createCreditMovement: vi.fn(),
+    findHistoryByWalletId: vi.fn(),
   };
 }
 
@@ -222,5 +221,113 @@ describe("TransactionsService.createExchange", () => {
     await expect(
       service.createExchange("fb1", input, "key-1"),
     ).rejects.toBe(error);
+  });
+});
+
+describe("TransactionsService.listTransactions", () => {
+  let repositoryMock: RepositoryMock;
+  let service: TransactionsService;
+
+  const query = {
+    type: "sale" as const,
+    currency: "USD" as const,
+    limit: 20,
+    offset: 0,
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+
+    repositoryMock = createRepositoryMock();
+    service = new TransactionsService(
+      repositoryMock as unknown as TransactionsRepository,
+      undefined as unknown as RateProvider,
+    );
+
+    (pool.connect as ReturnType<typeof vi.fn>).mockResolvedValue(
+      fakeClient,
+    );
+    fakeClient.query.mockImplementation(async () => ({ rows: [] }));
+    fakeClient.release.mockImplementation(() => undefined);
+
+    vi.mocked(findUserByFirebaseUid).mockResolvedValue({
+      id: "u1",
+      firebase_uid: "fb1",
+      status: "active",
+    } as never);
+    repositoryMock.findWalletByUserId.mockResolvedValue({
+      id: "w1",
+      user_id: "u1",
+      status: "active",
+    });
+  });
+
+  it("devuelve el historial filtrado y commitea", async () => {
+    const history = [
+      {
+        id: "tx-1",
+        type: "sale",
+        status: "completed",
+        movements: [],
+      },
+    ];
+    repositoryMock.findHistoryByWalletId.mockResolvedValue(history);
+
+    const result = await service.listTransactions("fb1", query);
+
+    expect(result).toBe(history);
+    expect(
+      repositoryMock.findHistoryByWalletId,
+    ).toHaveBeenCalledWith(
+      fakeClient,
+      "w1",
+      "sale",
+      "USD",
+      20,
+      0,
+    );
+    expect(fakeClient.query).toHaveBeenCalledWith("COMMIT");
+  });
+
+  it("pasa null a los filtros cuando no vienen", async () => {
+    repositoryMock.findHistoryByWalletId.mockResolvedValue([]);
+
+    await service.listTransactions("fb1", { limit: 10, offset: 5 });
+
+    expect(
+      repositoryMock.findHistoryByWalletId,
+    ).toHaveBeenCalledWith(
+      fakeClient,
+      "w1",
+      null,
+      null,
+      10,
+      5,
+    );
+  });
+
+  it("rechaza con 404 si el usuario no existe", async () => {
+    vi.mocked(findUserByFirebaseUid).mockResolvedValue(null);
+
+    await expect(
+      service.listTransactions("fb1", query),
+    ).rejects.toMatchObject({
+      statusCode: 404,
+      code: "USER_NOT_FOUND",
+    });
+    expect(
+      repositoryMock.findHistoryByWalletId,
+    ).not.toHaveBeenCalled();
+  });
+
+  it("rechaza con 404 si la billetera no existe", async () => {
+    repositoryMock.findWalletByUserId.mockResolvedValue(null);
+
+    await expect(
+      service.listTransactions("fb1", query),
+    ).rejects.toMatchObject({
+      statusCode: 404,
+      code: "WALLET_NOT_FOUND",
+    });
   });
 });

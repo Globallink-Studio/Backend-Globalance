@@ -7,11 +7,11 @@ import type {
   DemoFundingInput,
   ExchangeInput,
   InternalTransferInput,
+  ListTransactionsQuery,
 } from "./transactions.schema";
-import {
-  TransactionsService,
-  TransactionsServiceError,
-} from "./transactions.service";
+import { listTransactionsQuerySchema } from "./transactions.schema";
+import { TransactionsService } from "./transactions.service";
+import { TransactionsServiceError } from "../../errors/service-errors";
 
 export class TransactionsController {
   constructor(
@@ -175,6 +175,70 @@ export class TransactionsController {
         message:
           "Transferencia interna realizada correctamente",
         transaction,
+      });
+    } catch (error) {
+      if (error instanceof TransactionsServiceError) {
+        res.status(error.statusCode).json({
+          error: {
+            code: error.code,
+            message: error.message,
+          },
+        });
+        return;
+      }
+
+      next(error);
+    }
+  };
+
+  listTransactions = async (
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ): Promise<void> => {
+    try {
+      const firebaseUid = req.user?.uid;
+
+      if (!firebaseUid) {
+        res.status(401).json({
+          error: {
+            code: "UNAUTHENTICATED",
+            message: "Usuario no autenticado",
+          },
+        });
+        return;
+      }
+
+      const queryResult =
+        listTransactionsQuerySchema.safeParse(req.query);
+
+      if (!queryResult.success) {
+        res.status(400).json({
+          error: {
+            code: "INVALID_QUERY",
+            message: "Los filtros del historial no son válidos",
+            details: queryResult.error.issues.map((issue) => ({
+              field: issue.path.join("."),
+              message: issue.message,
+            })),
+          },
+        });
+        return;
+      }
+
+      const transactions =
+        await this.transactionsService.listTransactions(
+          firebaseUid,
+          queryResult.data as ListTransactionsQuery,
+        );
+
+      res.status(200).json({
+        transactions,
+        pagination: {
+          limit: queryResult.data.limit,
+          offset: queryResult.data.offset,
+          returned: transactions.length,
+        },
       });
     } catch (error) {
       if (error instanceof TransactionsServiceError) {
