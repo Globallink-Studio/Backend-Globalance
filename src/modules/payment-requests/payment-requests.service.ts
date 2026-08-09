@@ -112,4 +112,99 @@ export class PaymentRequestsService {
       client.release();
     }
   }
+
+    async cancelPaymentRequest(
+    firebaseUid: string,
+    paymentRequestId: string,
+  ): Promise<PaymentRequestRecord> {
+    const client = await pool.connect();
+    let transactionFinished = false;
+
+    try {
+      await client.query("BEGIN");
+
+      const requester = await findUserByFirebaseUid(
+        client,
+        firebaseUid,
+      );
+
+      if (!requester) {
+        throw new PaymentRequestsServiceError(
+          404,
+          "REQUESTER_NOT_FOUND",
+          "Usuario solicitante no encontrado",
+        );
+      }
+
+      const paymentRequest =
+        await this.paymentRequestsRepository.findByIdForUpdate(
+          client,
+          paymentRequestId,
+        );
+
+      if (!paymentRequest) {
+        throw new PaymentRequestsServiceError(
+          404,
+          "PAYMENT_REQUEST_NOT_FOUND",
+          "Solicitud de cobro no encontrada",
+        );
+      }
+
+      if (
+        paymentRequest.requester_user_id !== requester.id
+      ) {
+        throw new PaymentRequestsServiceError(
+          403,
+          "PAYMENT_REQUEST_FORBIDDEN",
+          "Solo el usuario que creó la solicitud puede cancelarla",
+        );
+      }
+
+      if (
+        paymentRequest.status === "pending" &&
+        paymentRequest.expires_at.getTime() <= Date.now()
+      ) {
+        await this.paymentRequestsRepository.markAsExpired(
+          client,
+          paymentRequest.id,
+        );
+
+        await client.query("COMMIT");
+        transactionFinished = true;
+
+        throw new PaymentRequestsServiceError(
+          409,
+          "PAYMENT_REQUEST_EXPIRED",
+          "La solicitud de cobro está vencida",
+        );
+      }
+
+      if (paymentRequest.status !== "pending") {
+        throw new PaymentRequestsServiceError(
+          409,
+          "PAYMENT_REQUEST_NOT_PENDING",
+          "Solo se puede cancelar una solicitud pendiente",
+        );
+      }
+
+      const cancelledPaymentRequest =
+        await this.paymentRequestsRepository.cancel(
+          client,
+          paymentRequest.id,
+        );
+
+      await client.query("COMMIT");
+      transactionFinished = true;
+
+      return cancelledPaymentRequest;
+    } catch (error) {
+      if (!transactionFinished) {
+        await client.query("ROLLBACK");
+      }
+
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
 }

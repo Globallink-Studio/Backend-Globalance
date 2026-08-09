@@ -15,4 +15,10 @@ paymentRequestsRouter.post(
   paymentRequestsController.create,
 );
 
+paymentRequestsRouter.patch(
+  "/:id/cancel",
+  verifyFirebaseToken,
+  paymentRequestsController.cancel,
+);
+
 export { paymentRequestsRouter };
