@@ -89,5 +89,15 @@ export const internalTransferSchema = z.discriminatedUnion(
   ],
 );
 
+export const listTransactionsQuerySchema = z
+  .object({
+    type: z.enum(["income", "purchase", "sale", "conversion", "transfer"]).optional(),
+    currency: z.enum(["ARS", "USD", "EUR"]).optional(),
+    limit: z.coerce.number().int().min(1).max(100).default(20),
+    offset: z.coerce.number().int().min(0).default(0),
+  })
+  .strict();
+
 export type DemoFundingInput = z.infer<typeof demoFundingSchema>;
 export type InternalTransferInput = z.infer<typeof internalTransferSchema>;
+export type ListTransactionsQuery = z.infer<typeof listTransactionsQuerySchema>;

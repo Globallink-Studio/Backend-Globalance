@@ -1,5 +1,6 @@
 import { env } from "../../config/env";
 import { pool } from "../../db/pool";
+import { PaymentRequestsServiceError } from "../../errors/service-errors";
 import { findUserByFirebaseUid } from "../auth/auth.repository";
 import type {
   CreatePaymentRequestInput,
@@ -11,17 +12,6 @@ import {
   PaymentRequestsRepository,
 } from "./payment-requests.repository";
 import { TransactionsRepository } from "../transactions/transactions.repository";
-
-export class PaymentRequestsServiceError extends Error {
-  constructor(
-    public readonly statusCode: number,
-    public readonly code: string,
-    message: string,
-  ) {
-    super(message);
-    this.name = "PaymentRequestsServiceError";
-  }
-}
 
 export interface CreatedPaymentRequest
   extends PaymentRequestRecord {
