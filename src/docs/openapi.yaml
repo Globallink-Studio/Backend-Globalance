@@ -447,6 +447,66 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /exchange/rates:
+    get:
+      tags:
+        - Exchange
+      summary: Obtener tasas de cambio desde una moneda base
+      description: >
+        Devuelve las tasas de cambio de la moneda base contra las demás monedas
+        soportadas (ARS, USD, EUR). Si no se indica `base`, se usa la moneda
+        principal (displayCurrency) del usuario. Las tasas usan la misma cache
+        que el endpoint de cotización.
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: base
+          required: false
+          schema:
+            type: string
+            enum:
+              - ARS
+              - USD
+              - EUR
+          description: >
+            Moneda base. Por defecto la moneda principal del usuario
+            (displayCurrency).
+      responses:
+        "200":
+          description: Tasas obtenidas correctamente
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  rates:
+                    $ref: "#/components/schemas/Rates"
+        "400":
+          description: Parámetros de consulta inválidos
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Token ausente, inválido o vencido
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "502":
+          description: No se pudo obtener la tasa de los proveedores
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Error interno del servidor
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
 components:
   securitySchemes:
     bearerAuth:
@@ -810,6 +870,31 @@ components:
           type: string
         rate:
           type: string
+        provider:
+          type: string
+          enum:
+            - frankfurter
+            - exchange_rate_api
+        fetchedAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+
+    Rates:
+      type: object
+      properties:
+        base:
+          type: string
+          example: USD
+        rates:
+          type: object
+          additionalProperties:
+            type: string
+          example:
+            ARS: "1498.1200000000"
+            EUR: "0.8661200000"
         provider:
           type: string
           enum:

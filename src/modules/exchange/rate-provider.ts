@@ -1,4 +1,5 @@
 import { env } from "../../config/env";
+import { findValidRate, upsertRate } from "./rate-cache.repository";
 
 export type RateProviderName = "frankfurter" | "exchange_rate_api";
 
@@ -18,22 +19,62 @@ export class RateProviderError extends Error {
 }
 
 const REQUEST_TIMEOUT_MS = 5000;
+const PRIMARY_TTL_MS = 60 * 60 * 1000;
+const FALLBACK_TTL_MS = 12 * 60 * 60 * 1000;
 
 export class RateProvider {
   async getRate(
     source: string,
     target: string,
   ): Promise<ExchangeRate> {
+    const cached = await this.readCache(source, target);
+
+    if (cached) {
+      return cached;
+    }
+
     try {
-      return await this.fetchFrankfurter(source, target);
+      const rate = await this.fetchFrankfurter(source, target);
+      await this.storeCache(rate);
+      return rate;
     } catch {
       try {
-        return await this.fetchExchangeRateApi(source, target);
+        const rate = await this.fetchExchangeRateApi(source, target);
+        await this.storeCache(rate);
+        return rate;
       } catch {
         throw new RateProviderError(
           `No se pudieron obtener las tasas de cambio (${source} → ${target}) de los proveedores disponibles`,
         );
       }
+    }
+  }
+
+  private async readCache(
+    source: string,
+    target: string,
+  ): Promise<ExchangeRate | null> {
+    try {
+      return await findValidRate(source, target, new Date());
+    } catch {
+      return null;
+    }
+  }
+
+  private async storeCache(rate: ExchangeRate): Promise<void> {
+    const ttlMs =
+      rate.provider === "frankfurter"
+        ? PRIMARY_TTL_MS
+        : FALLBACK_TTL_MS;
+
+    const expiresAt = new Date(
+      rate.fetchedAt.getTime() + ttlMs,
+    );
+
+    try {
+      await upsertRate(rate, expiresAt);
+    } catch {
+      // La cache es un refuerzo: si falla, la tasa en vivo igual se devuelve.
     }
   }
 
