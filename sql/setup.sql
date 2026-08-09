@@ -3,6 +3,8 @@
 \ir 003_email_deliveries.sql
 \ir 004_exchange_rate_cache.sql
 \ir 005_demo_funding.sql
+\ir 006_transaction_indexes.sql
+\ir 007_transaction_types.sql
 
 INSERT INTO currencies (code, name, symbol, decimal_places)
 VALUES

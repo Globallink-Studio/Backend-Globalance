@@ -20,6 +20,43 @@ export interface LockedBalance {
   amount: string;
 }
 
+export interface TransactionHistoryMovement {
+  direction: "debit" | "credit";
+  concept: "principal" | "fee";
+  currency: string;
+  amount: string;
+  balance_before: string;
+  balance_after: string;
+  created_at: Date;
+}
+
+export interface TransactionHistoryItem {
+  id: string;
+  type:
+    | "income"
+    | "purchase"
+    | "sale"
+    | "conversion"
+    | "transfer";
+  status: string;
+  description: string | null;
+  created_at: Date;
+  completed_at: Date | null;
+  movements: TransactionHistoryMovement[];
+  source_currency: string | null;
+  target_currency: string | null;
+  applied_rate: string | null;
+  rate_provider: string | null;
+  rate_fetched_at: Date | null;
+  destination_wallet_id: string | null;
+  recipient_name: string | null;
+  funding_method: string | null;
+}
+
+export interface TransactionCount {
+  total: number;
+}
+
 export class TransactionsRepository {
   async findWalletByUserId(
     client: PoolClient,
@@ -178,5 +215,162 @@ export class TransactionsRepository {
         balanceAfter,
       ],
     );
+  }
+
+    async findHistoryByWalletId(
+    client: PoolClient,
+    walletId: string,
+    transactionType: TransactionHistoryItem["type"] | null,
+    currency: string | null,
+    limit: number,
+    offset: number,
+  ): Promise<TransactionHistoryItem[]> {
+    const result = await client.query<TransactionHistoryItem>(
+      `
+        SELECT
+          t.id,
+          t.type,
+          t.status,
+          t.description,
+          t.created_at,
+          t.completed_at,
+          COALESCE(
+            movement_data.movements,
+            '[]'::jsonb
+          ) AS movements,
+          c.source_currency,
+          c.target_currency,
+          c.applied_rate,
+          c.rate_provider,
+          c.rate_fetched_at,
+          tr.destination_wallet_id,
+          tr.recipient_name,
+          i.funding_method
+        FROM transactions AS t
+        LEFT JOIN conversions AS c
+          ON c.transaction_id = t.id
+        LEFT JOIN transfers AS tr
+          ON tr.transaction_id = t.id
+        LEFT JOIN incomes AS i
+          ON i.transaction_id = t.id
+        LEFT JOIN LATERAL (
+          SELECT jsonb_agg(
+            jsonb_build_object(
+              'direction', m.direction,
+              'concept', m.concept,
+              'currency', b.currency_code,
+              'amount', m.amount::text,
+              'balance_before', m.balance_before::text,
+              'balance_after', m.balance_after::text,
+              'created_at', m.created_at
+            )
+            ORDER BY m.created_at
+          ) AS movements
+          FROM movements AS m
+          INNER JOIN balances AS b
+            ON b.id = m.balance_id
+          WHERE m.transaction_id = t.id
+        ) AS movement_data ON TRUE
+        WHERE t.wallet_id = $1
+          AND ($2::varchar IS NULL OR t.type = $2)
+          AND (
+            $3::char(3) IS NULL
+            OR EXISTS (
+              SELECT 1
+              FROM movements AS filtered_movement
+              INNER JOIN balances AS filtered_balance
+                ON filtered_balance.id =
+                   filtered_movement.balance_id
+              WHERE filtered_movement.transaction_id = t.id
+                AND filtered_balance.currency_code =
+                    $3::char(3)
+            )
+          )
+        ORDER BY t.created_at DESC
+        LIMIT $4
+        OFFSET $5
+      `,
+      [
+        walletId,
+        transactionType,
+        currency,
+        limit,
+        offset,
+      ],
+    );
+
+    return result.rows;
+  }
+
+    async countMonthlyTransactions(
+    client: PoolClient,
+    walletId: string,
+  ): Promise<number> {
+    const result = await client.query<TransactionCount>(
+      `
+        SELECT COUNT(*)::integer AS total
+        FROM transactions
+        WHERE wallet_id = $1
+          AND created_at >= (
+            date_trunc(
+              'month',
+              CURRENT_TIMESTAMP AT TIME ZONE
+                'America/Argentina/Buenos_Aires'
+            )
+            AT TIME ZONE 'America/Argentina/Buenos_Aires'
+          )
+          AND created_at < (
+            (
+              date_trunc(
+                'month',
+                CURRENT_TIMESTAMP AT TIME ZONE
+                  'America/Argentina/Buenos_Aires'
+              )
+              + INTERVAL '1 month'
+            )
+            AT TIME ZONE 'America/Argentina/Buenos_Aires'
+          )
+      `,
+      [walletId],
+    );
+
+    return result.rows[0].total;
+  }
+
+    async countDailyCompletedConversions(
+    client: PoolClient,
+    walletId: string,
+  ): Promise<number> {
+    const result = await client.query<TransactionCount>(
+      `
+        SELECT COUNT(*)::integer AS total
+        FROM transactions
+        WHERE wallet_id = $1
+          AND type = 'conversion'
+          AND status = 'completed'
+          AND completed_at >= (
+            date_trunc(
+              'day',
+              CURRENT_TIMESTAMP AT TIME ZONE
+                'America/Argentina/Buenos_Aires'
+            )
+            AT TIME ZONE 'America/Argentina/Buenos_Aires'
+          )
+          AND completed_at < (
+            (
+              date_trunc(
+                'day',
+                CURRENT_TIMESTAMP AT TIME ZONE
+                  'America/Argentina/Buenos_Aires'
+              )
+              + INTERVAL '1 day'
+            )
+            AT TIME ZONE 'America/Argentina/Buenos_Aires'
+          )
+      `,
+      [walletId],
+    );
+
+    return result.rows[0].total;
   }
 }
