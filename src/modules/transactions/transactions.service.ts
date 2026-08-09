@@ -16,6 +16,8 @@ import {
   InternalTransferRecord,
   TransactionsRepository,
 } from "./transactions.repository";
+import { EmailsService } from "../emails/emails.service";
+import { createTransferReceipt } from "../emails/emails.templates";
 
 export class TransactionsServiceError extends Error {
   constructor(
@@ -35,9 +37,10 @@ export class TransactionsService {
     private readonly transactionsRepository =
       new TransactionsRepository(),
     private readonly rateProvider = new RateProvider(),
-  ) {}
+    private readonly emailsService = new EmailsService(),
+  ) { }
 
-    async createDemoFunding(
+  async createDemoFunding(
     firebaseUid: string,
     input: DemoFundingInput,
     idempotencyKey: string,
@@ -68,7 +71,7 @@ export class TransactionsService {
     try {
       await client.query("BEGIN");
 
-            const user = await findUserByFirebaseUid(client, firebaseUid);
+      const user = await findUserByFirebaseUid(client, firebaseUid);
 
       if (!user) {
         throw new TransactionsServiceError(
@@ -120,7 +123,7 @@ export class TransactionsService {
         return existingTransaction;
       }
 
-            const balance =
+      const balance =
         await this.transactionsRepository.findBalanceForUpdate(
           client,
           wallet.id,
@@ -187,7 +190,7 @@ export class TransactionsService {
     }
   }
 
-    async createExchange(
+  async createExchange(
     firebaseUid: string,
     input: ExchangeInput,
     idempotencyKey: string,
@@ -376,7 +379,7 @@ export class TransactionsService {
           input.sourceAmount,
         );
 
-              if (!sourceBalanceAfter) {
+      if (!sourceBalanceAfter) {
         throw new TransactionsServiceError(
           400,
           "INSUFFICIENT_FUNDS",
@@ -465,7 +468,7 @@ export class TransactionsService {
     return `Conversión de ${sourceCurrency} a ${targetCurrency}`;
   }
 
-    async createInternalTransfer(
+  async createInternalTransfer(
     firebaseUid: string,
     input: InternalTransferInput,
     idempotencyKey: string,
@@ -484,6 +487,8 @@ export class TransactionsService {
     }
 
     const client = await pool.connect();
+
+    let transactionFinished = false;
 
     try {
       await client.query("BEGIN");
@@ -559,6 +564,20 @@ export class TransactionsService {
           403,
           "DESTINATION_WALLET_INACTIVE",
           "La billetera destinataria no está activa",
+        );
+      }
+
+      const destinationEmail =
+        await this.transactionsRepository.findUserEmailById(
+          client,
+          destinationWallet.user_id,
+        );
+
+      if (!destinationEmail) {
+        throw new TransactionsServiceError(
+          404,
+          "DESTINATION_USER_NOT_FOUND",
+          "No se encontró el usuario destinatario",
         );
       }
 
@@ -684,13 +703,42 @@ export class TransactionsService {
       }
 
       await client.query("COMMIT");
+      transactionFinished = true;
+
+      await Promise.all([
+        this.emailsService.sendTrackedEmail({
+          context: { transactionId },
+          event: "transfer_completed",
+          recipientEmail: user.email,
+          content: createTransferReceipt({
+            direction: "sent",
+            counterpartName: destinationWallet.alias,
+            amount: input.amount,
+            currency: input.currency,
+            transactionId,
+          }),
+        }),
+        this.emailsService.sendTrackedEmail({
+          context: { transactionId },
+          event: "transfer_completed",
+          recipientEmail: destinationEmail,
+          content: createTransferReceipt({
+            direction: "received",
+            counterpartName: user.email,
+            amount: input.amount,
+            currency: input.currency,
+            transactionId,
+          }),
+        }),
+      ]);
 
       return createdTransfer;
     } catch (error) {
-      await client.query("ROLLBACK");
+      if (!transactionFinished) {
+        await client.query("ROLLBACK");
+      }
+
       throw error;
-    } finally {
-      client.release();
     }
   }
 }

@@ -7,6 +7,7 @@
 \ir 007_transaction_types.sql
 \ir 008_user_timezone.sql
 \ir 009_payment_requests.sql
+\ir 010_email_delivery_context.sql
 
 INSERT INTO currencies (code, name, symbol, decimal_places)
 VALUES
