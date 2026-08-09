@@ -1,9 +1,17 @@
 import { env } from "../../config/env";
 import { pool } from "../../db/pool";
 import { findUserByFirebaseUid } from "../auth/auth.repository";
-import type { DemoFundingInput } from "./transactions.schema";
+import {
+  RateProvider,
+  RateProviderError,
+} from "../exchange/rate-provider";
+import type {
+  DemoFundingInput,
+  ExchangeInput,
+} from "./transactions.schema";
 import {
   DemoFundingRecord,
+  ExchangeRecord,
   TransactionsRepository,
 } from "./transactions.repository";
 
@@ -18,10 +26,13 @@ export class TransactionsServiceError extends Error {
   }
 }
 
+const EXCHANGE_DAILY_LIMIT = 30;
+
 export class TransactionsService {
   constructor(
     private readonly transactionsRepository =
       new TransactionsRepository(),
+    private readonly rateProvider = new RateProvider(),
   ) {}
 
     async createDemoFunding(
@@ -172,5 +183,275 @@ export class TransactionsService {
     } finally {
       client.release();
     }
+  }
+
+    async createExchange(
+    firebaseUid: string,
+    input: ExchangeInput,
+    idempotencyKey: string,
+  ): Promise<ExchangeRecord> {
+    const normalizedIdempotencyKey = idempotencyKey.trim();
+
+    if (
+      normalizedIdempotencyKey.length === 0 ||
+      normalizedIdempotencyKey.length > 100
+    ) {
+      throw new TransactionsServiceError(
+        400,
+        "INVALID_IDEMPOTENCY_KEY",
+        "El encabezado Idempotency-Key es obligatorio y debe tener hasta 100 caracteres",
+      );
+    }
+
+    let exchangeRate;
+
+    try {
+      exchangeRate = await this.rateProvider.getRate(
+        input.sourceCurrency,
+        input.targetCurrency,
+      );
+    } catch (error) {
+      if (error instanceof RateProviderError) {
+        throw new TransactionsServiceError(
+          502,
+          "RATE_PROVIDER_UNAVAILABLE",
+          error.message,
+        );
+      }
+
+      throw error;
+    }
+
+    const client = await pool.connect();
+
+    try {
+      await client.query("BEGIN");
+
+      const user = await findUserByFirebaseUid(client, firebaseUid);
+
+      if (!user) {
+        throw new TransactionsServiceError(
+          404,
+          "USER_NOT_FOUND",
+          "Usuario no encontrado",
+        );
+      }
+
+      if (user.status !== "active") {
+        throw new TransactionsServiceError(
+          403,
+          "USER_INACTIVE",
+          "El usuario no está activo",
+        );
+      }
+
+      const wallet =
+        await this.transactionsRepository.findWalletByUserId(
+          client,
+          user.id,
+        );
+
+      if (!wallet) {
+        throw new TransactionsServiceError(
+          404,
+          "WALLET_NOT_FOUND",
+          "Billetera no encontrada",
+        );
+      }
+
+      if (wallet.status !== "active") {
+        throw new TransactionsServiceError(
+          403,
+          "WALLET_INACTIVE",
+          "La billetera no está activa",
+        );
+      }
+
+      const existingTransaction =
+        await this.transactionsRepository.findExchangeByIdempotencyKey(
+          client,
+          normalizedIdempotencyKey,
+          wallet.id,
+        );
+
+      if (existingTransaction) {
+        await client.query("COMMIT");
+        return existingTransaction;
+      }
+
+      const dailyCount =
+        await this.transactionsRepository.countDailyExchangeOperations(
+          client,
+          wallet.id,
+          user.timezone,
+        );
+
+      if (dailyCount >= EXCHANGE_DAILY_LIMIT) {
+        throw new TransactionsServiceError(
+          429,
+          "EXCHANGE_DAILY_LIMIT_REACHED",
+          `Se alcanzó el límite diario de ${EXCHANGE_DAILY_LIMIT} operaciones de cambio`,
+        );
+      }
+
+      const type = this.classifyExchangeType(
+        user.display_currency,
+        input.sourceCurrency,
+        input.targetCurrency,
+      );
+
+      const description = this.buildExchangeDescription(
+        type,
+        input.sourceCurrency,
+        input.targetCurrency,
+      );
+
+      const sourceBalance =
+        await this.transactionsRepository.findBalanceForUpdate(
+          client,
+          wallet.id,
+          input.sourceCurrency,
+        );
+
+      if (!sourceBalance) {
+        throw new TransactionsServiceError(
+          404,
+          "BALANCE_NOT_FOUND",
+          `No existe un saldo en ${input.sourceCurrency} para esta billetera`,
+        );
+      }
+
+      const targetBalance =
+        await this.transactionsRepository.findBalanceForUpdate(
+          client,
+          wallet.id,
+          input.targetCurrency,
+        );
+
+      if (!targetBalance) {
+        throw new TransactionsServiceError(
+          404,
+          "BALANCE_NOT_FOUND",
+          `No existe un saldo en ${input.targetCurrency} para esta billetera`,
+        );
+      }
+
+      if (
+        Number(sourceBalance.amount) < Number(input.sourceAmount)
+      ) {
+        throw new TransactionsServiceError(
+          422,
+          "INSUFFICIENT_FUNDS",
+          `El saldo en ${input.sourceCurrency} no alcanza para la operación`,
+        );
+      }
+
+      const transactionId =
+        await this.transactionsRepository.createExchangeTransaction(
+          client,
+          wallet.id,
+          normalizedIdempotencyKey,
+          type,
+          description,
+        );
+
+      const targetAmount =
+        await this.transactionsRepository.createConversion(
+          client,
+          transactionId,
+          input.sourceCurrency,
+          input.targetCurrency,
+          input.sourceAmount,
+          String(exchangeRate.rate),
+          exchangeRate.provider,
+          exchangeRate.fetchedAt,
+        );
+
+      const sourceBalanceAfter =
+        await this.transactionsRepository.decreaseBalance(
+          client,
+          sourceBalance.id,
+          input.sourceAmount,
+        );
+
+      await this.transactionsRepository.createDebitMovement(
+        client,
+        transactionId,
+        sourceBalance.id,
+        input.sourceAmount,
+        sourceBalance.amount,
+        sourceBalanceAfter,
+      );
+
+      const targetBalanceAfter =
+        await this.transactionsRepository.increaseBalance(
+          client,
+          targetBalance.id,
+          targetAmount,
+        );
+
+      await this.transactionsRepository.createCreditMovement(
+        client,
+        transactionId,
+        targetBalance.id,
+        targetAmount,
+        targetBalance.amount,
+        targetBalanceAfter,
+      );
+
+      const createdTransaction =
+        await this.transactionsRepository.findExchangeByIdempotencyKey(
+          client,
+          normalizedIdempotencyKey,
+          wallet.id,
+        );
+
+      if (!createdTransaction) {
+        throw new Error(
+          "No se pudo recuperar la operación de cambio creada",
+        );
+      }
+
+      await client.query("COMMIT");
+
+      return createdTransaction;
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  private classifyExchangeType(
+    displayCurrency: string,
+    sourceCurrency: string,
+    targetCurrency: string,
+  ): "purchase" | "sale" | "conversion" {
+    if (sourceCurrency === displayCurrency) {
+      return "sale";
+    }
+
+    if (targetCurrency === displayCurrency) {
+      return "purchase";
+    }
+
+    return "conversion";
+  }
+
+  private buildExchangeDescription(
+    type: "purchase" | "sale" | "conversion",
+    sourceCurrency: string,
+    targetCurrency: string,
+  ): string {
+    if (type === "sale") {
+      return `Venta de ${sourceCurrency} por ${targetCurrency}`;
+    }
+
+    if (type === "purchase") {
+      return `Compra de ${targetCurrency} con ${sourceCurrency}`;
+    }
+
+    return `Conversión de ${sourceCurrency} a ${targetCurrency}`;
   }
 }

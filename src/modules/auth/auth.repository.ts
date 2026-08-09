@@ -7,6 +7,7 @@ export type User = {
   email: string;
   user_type: "person" | "company" | null;
   display_currency: string;
+  timezone: string;
   status: "active" | "inactive" | "blocked";
   created_at: Date;
   last_access_at: Date | null;

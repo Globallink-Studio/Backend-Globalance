@@ -28,6 +28,12 @@ tags:
   - name: Users
     description: Gestión del perfil personal o empresarial
 
+  - name: Transactions
+    description: Operaciones de la billetera (cargas, cambios de moneda)
+
+  - name: Exchange
+    description: Cotizaciones de cambio de moneda
+
 paths:
   /health:
     get:
@@ -285,6 +291,162 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /transactions/exchange:
+    post:
+      tags:
+        - Transactions
+      summary: Realizar una operación de cambio (compra, venta o conversión)
+      description: >
+        Convierte una moneda en otra aplicando la tasa del día (Frankfurter con
+        fallback a ExchangeRate-API). El tipo se clasifica según la moneda
+        principal (displayCurrency): si el origen es la principal se registra
+        como sale, si el destino es la principal como purchase, y si ninguna lo
+        es como conversion. Respeta un límite diario de 30 operaciones.
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: header
+          name: Idempotency-Key
+          required: true
+          schema:
+            type: string
+            maxLength: 100
+          description: Clave de idempotencia para evitar duplicados.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ExchangeInput"
+      responses:
+        "201":
+          description: Operación de cambio realizada correctamente
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Operación de cambio realizada correctamente
+                  transaction:
+                    $ref: "#/components/schemas/ExchangeTransaction"
+        "400":
+          description: Datos inválidos o falta el encabezado Idempotency-Key
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Token ausente, inválido o vencido
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Usuario, billetera o saldo no encontrados
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: Saldo insuficiente para la operación
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          description: Límite diario de operaciones de cambio alcanzado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "502":
+          description: No se pudo obtener la tasa de los proveedores
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Error interno del servidor
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /exchange/quotes:
+    get:
+      tags:
+        - Exchange
+      summary: Obtener una cotización estimada
+      description: >
+        Devuelve la tasa de cambio entre dos monedas y el monto estimado que se
+        recibiría. Es una cotización de referencia (no persiste nada y vence en
+        60 segundos).
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: source
+          required: true
+          schema:
+            type: string
+            enum:
+              - ARS
+              - USD
+              - EUR
+          description: Moneda de origen.
+        - in: query
+          name: target
+          required: true
+          schema:
+            type: string
+            enum:
+              - ARS
+              - USD
+              - EUR
+          description: Moneda de destino.
+        - in: query
+          name: amount
+          required: false
+          schema:
+            type: string
+          description: Monto en la moneda de origen (hasta 8 decimales). Por defecto 1.
+      responses:
+        "200":
+          description: Cotización obtenida correctamente
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  quote:
+                    $ref: "#/components/schemas/Quote"
+        "400":
+          description: Parámetros de consulta inválidos
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Token ausente, inválido o vencido
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "502":
+          description: No se pudo obtener la tasa de los proveedores
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Error interno del servidor
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
 components:
   securitySchemes:
     bearerAuth:
@@ -406,6 +568,12 @@ components:
             - person
             - company
           nullable: true
+        display_currency:
+          type: string
+          example: ARS
+        timezone:
+          type: string
+          example: America/Argentina/Buenos_Aires
         status:
           type: string
           enum:
@@ -471,6 +639,10 @@ components:
             - EUR
           example: ARS
           description: Moneda principal de la wallet. Determina cómo se clasifican las operaciones de compra y venta.
+        timezone:
+          type: string
+          example: America/Argentina/Buenos_Aires
+          description: Zona horaria del usuario (IANA). Determina los límites diarios y el historial. Si no se envía, se conserva el valor actual.
       additionalProperties: false
 
     CompanyProfileInput:
@@ -516,6 +688,10 @@ components:
             - EUR
           example: ARS
           description: Moneda principal de la wallet. Determina cómo se clasifican las operaciones de compra y venta.
+        timezone:
+          type: string
+          example: America/Argentina/Buenos_Aires
+          description: Zona horaria del usuario (IANA). Determina los límites diarios y el historial. Si no se envía, se conserva el valor actual.
       additionalProperties: false
 
     Balance:
@@ -538,6 +714,111 @@ components:
           example: "1500.00"
           description: El monto se devuelve como texto para conservar la precisión decimal.
         updated_at:
+          type: string
+          format: date-time
+
+    ExchangeInput:
+      type: object
+      required:
+        - sourceCurrency
+        - targetCurrency
+        - sourceAmount
+      properties:
+        sourceCurrency:
+          type: string
+          enum:
+            - ARS
+            - USD
+            - EUR
+          example: ARS
+        targetCurrency:
+          type: string
+          enum:
+            - ARS
+            - USD
+            - EUR
+          example: USD
+        sourceAmount:
+          type: string
+          example: "100000"
+          description: Monto a convertir en la moneda de origen (hasta 8 decimales).
+      additionalProperties: false
+
+    ExchangeTransaction:
+      type: object
+      properties:
+        transaction_id:
+          type: string
+          format: uuid
+        type:
+          type: string
+          enum:
+            - purchase
+            - sale
+            - conversion
+        status:
+          type: string
+          enum:
+            - completed
+        description:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        completed_at:
+          type: string
+          format: date-time
+          nullable: true
+        source_currency:
+          type: string
+          example: ARS
+        target_currency:
+          type: string
+          example: USD
+        source_amount:
+          type: string
+        target_amount:
+          type: string
+        applied_rate:
+          type: string
+        rate_provider:
+          type: string
+          enum:
+            - frankfurter
+            - exchange_rate_api
+        rate_fetched_at:
+          type: string
+          format: date-time
+        source_balance_after:
+          type: string
+        target_balance_after:
+          type: string
+
+    Quote:
+      type: object
+      properties:
+        sourceCurrency:
+          type: string
+          example: ARS
+        targetCurrency:
+          type: string
+          example: USD
+        sourceAmount:
+          type: string
+        targetAmount:
+          type: string
+        rate:
+          type: string
+        provider:
+          type: string
+          enum:
+            - frankfurter
+            - exchange_rate_api
+        fetchedAt:
+          type: string
+          format: date-time
+        expiresAt:
           type: string
           format: date-time
 
