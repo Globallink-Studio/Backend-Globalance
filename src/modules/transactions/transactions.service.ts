@@ -8,10 +8,12 @@ import {
 import type {
   DemoFundingInput,
   ExchangeInput,
+  InternalTransferInput,
 } from "./transactions.schema";
 import {
   DemoFundingRecord,
   ExchangeRecord,
+  InternalTransferRecord,
   TransactionsRepository,
 } from "./transactions.repository";
 
@@ -374,6 +376,14 @@ export class TransactionsService {
           input.sourceAmount,
         );
 
+              if (!sourceBalanceAfter) {
+        throw new TransactionsServiceError(
+          400,
+          "INSUFFICIENT_FUNDS",
+          "Saldo insuficiente para realizar la conversión",
+        );
+      }
+
       await this.transactionsRepository.createDebitMovement(
         client,
         transactionId,
@@ -453,5 +463,234 @@ export class TransactionsService {
     }
 
     return `Conversión de ${sourceCurrency} a ${targetCurrency}`;
+  }
+
+    async createInternalTransfer(
+    firebaseUid: string,
+    input: InternalTransferInput,
+    idempotencyKey: string,
+  ): Promise<InternalTransferRecord> {
+    const normalizedIdempotencyKey = idempotencyKey.trim();
+
+    if (
+      normalizedIdempotencyKey.length === 0 ||
+      normalizedIdempotencyKey.length > 100
+    ) {
+      throw new TransactionsServiceError(
+        400,
+        "INVALID_IDEMPOTENCY_KEY",
+        "El encabezado Idempotency-Key es obligatorio y debe tener hasta 100 caracteres",
+      );
+    }
+
+    const client = await pool.connect();
+
+    try {
+      await client.query("BEGIN");
+
+      const user = await findUserByFirebaseUid(
+        client,
+        firebaseUid,
+      );
+
+      if (!user) {
+        throw new TransactionsServiceError(
+          404,
+          "USER_NOT_FOUND",
+          "Usuario no encontrado",
+        );
+      }
+
+      if (user.status !== "active") {
+        throw new TransactionsServiceError(
+          403,
+          "USER_INACTIVE",
+          "El usuario no está activo",
+        );
+      }
+
+      const sourceWallet =
+        await this.transactionsRepository.findWalletByUserId(
+          client,
+          user.id,
+        );
+
+      if (!sourceWallet) {
+        throw new TransactionsServiceError(
+          404,
+          "SOURCE_WALLET_NOT_FOUND",
+          "Billetera emisora no encontrada",
+        );
+      }
+
+      if (sourceWallet.status !== "active") {
+        throw new TransactionsServiceError(
+          403,
+          "SOURCE_WALLET_INACTIVE",
+          "La billetera emisora no está activa",
+        );
+      }
+
+      const destinationWallet =
+        await this.transactionsRepository.findDestinationWallet(
+          client,
+          input.destinationType,
+          input.destinationValue,
+        );
+
+      if (!destinationWallet) {
+        throw new TransactionsServiceError(
+          404,
+          "DESTINATION_WALLET_NOT_FOUND",
+          "Billetera destinataria no encontrada",
+        );
+      }
+
+      if (destinationWallet.id === sourceWallet.id) {
+        throw new TransactionsServiceError(
+          400,
+          "SELF_TRANSFER_NOT_ALLOWED",
+          "No se puede transferir a la misma billetera",
+        );
+      }
+
+      if (destinationWallet.status !== "active") {
+        throw new TransactionsServiceError(
+          403,
+          "DESTINATION_WALLET_INACTIVE",
+          "La billetera destinataria no está activa",
+        );
+      }
+
+      const existingTransfer =
+        await this.transactionsRepository
+          .findInternalTransferByIdempotencyKey(
+            client,
+            normalizedIdempotencyKey,
+            sourceWallet.id,
+          );
+
+      if (existingTransfer) {
+        await client.query("COMMIT");
+        return existingTransfer;
+      }
+
+      const balances =
+        await this.transactionsRepository
+          .findTransferBalancesForUpdate(
+            client,
+            [
+              sourceWallet.id,
+              destinationWallet.id,
+            ],
+            input.currency,
+          );
+
+      const sourceBalance = balances.find(
+        (balance) =>
+          balance.wallet_id === sourceWallet.id,
+      );
+
+      const destinationBalance = balances.find(
+        (balance) =>
+          balance.wallet_id === destinationWallet.id,
+      );
+
+      if (!sourceBalance) {
+        throw new TransactionsServiceError(
+          404,
+          "SOURCE_BALANCE_NOT_FOUND",
+          `La billetera emisora no tiene saldo en ${input.currency}`,
+        );
+      }
+
+      if (!destinationBalance) {
+        throw new TransactionsServiceError(
+          404,
+          "DESTINATION_BALANCE_NOT_FOUND",
+          `La billetera destinataria no tiene saldo en ${input.currency}`,
+        );
+      }
+
+      const transactionId =
+        await this.transactionsRepository
+          .createTransferTransaction(
+            client,
+            sourceWallet.id,
+            normalizedIdempotencyKey,
+          );
+
+      await this.transactionsRepository
+        .createInternalTransferDetail(
+          client,
+          transactionId,
+          destinationWallet.id,
+          input.currency,
+          input.amount,
+        );
+
+      const sourceBalanceAfter =
+        await this.transactionsRepository.decreaseBalance(
+          client,
+          sourceBalance.id,
+          input.amount,
+        );
+
+      if (!sourceBalanceAfter) {
+        throw new TransactionsServiceError(
+          400,
+          "INSUFFICIENT_FUNDS",
+          "Saldo insuficiente para realizar la transferencia",
+        );
+      }
+
+      const destinationBalanceAfter =
+        await this.transactionsRepository.increaseBalance(
+          client,
+          destinationBalance.id,
+          input.amount,
+        );
+
+      await this.transactionsRepository.createDebitMovement(
+        client,
+        transactionId,
+        sourceBalance.id,
+        input.amount,
+        sourceBalance.amount,
+        sourceBalanceAfter,
+      );
+
+      await this.transactionsRepository.createCreditMovement(
+        client,
+        transactionId,
+        destinationBalance.id,
+        input.amount,
+        destinationBalance.amount,
+        destinationBalanceAfter,
+      );
+
+      const createdTransfer =
+        await this.transactionsRepository
+          .findInternalTransferByIdempotencyKey(
+            client,
+            normalizedIdempotencyKey,
+            sourceWallet.id,
+          );
+
+      if (!createdTransfer) {
+        throw new Error(
+          "No se pudo recuperar la transferencia interna creada",
+        );
+      }
+
+      await client.query("COMMIT");
+
+      return createdTransfer;
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
   }
 }

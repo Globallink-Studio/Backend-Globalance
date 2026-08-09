@@ -6,6 +6,7 @@ import type {
 import type {
   DemoFundingInput,
   ExchangeInput,
+  InternalTransferInput,
 } from "./transactions.schema";
 import {
   TransactionsService,
@@ -115,6 +116,64 @@ export class TransactionsController {
 
       res.status(201).json({
         message: "Operación de cambio realizada correctamente",
+        transaction,
+      });
+    } catch (error) {
+      if (error instanceof TransactionsServiceError) {
+        res.status(error.statusCode).json({
+          error: {
+            code: error.code,
+            message: error.message,
+          },
+        });
+        return;
+      }
+
+      next(error);
+    }
+  };
+
+  createInternalTransfer = async (
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ): Promise<void> => {
+    try {
+      const firebaseUid = req.user?.uid;
+
+      if (!firebaseUid) {
+        res.status(401).json({
+          error: {
+            code: "UNAUTHENTICATED",
+            message: "Usuario no autenticado",
+          },
+        });
+        return;
+      }
+
+      const idempotencyKey = req.header("Idempotency-Key");
+
+      if (!idempotencyKey) {
+        res.status(400).json({
+          error: {
+            code: "MISSING_IDEMPOTENCY_KEY",
+            message:
+              "El encabezado Idempotency-Key es obligatorio",
+          },
+        });
+        return;
+      }
+
+      const transaction =
+        await this.transactionsService.createInternalTransfer(
+          firebaseUid,
+          req.body as InternalTransferInput,
+          idempotencyKey,
+        );
+
+      res.status(201).json({
+        message:
+          "Transferencia interna realizada correctamente",
         transaction,
       });
     } catch (error) {
