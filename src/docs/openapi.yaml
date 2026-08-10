@@ -605,6 +605,64 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /ai/assistant:
+    post:
+      tags:
+        - AI Assistant
+      summary: Enviar una consulta al asistente financiero
+      description: >
+        Devuelve una respuesta del asistente basada en el contexto del
+        usuario (saldos y movimientos recientes). Si no se configuró la
+        clave de Gemini, responde en modo demostración.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AiAssistantInput"
+      responses:
+        "200":
+          description: Respuesta del asistente
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  reply:
+                    type: string
+        "400":
+          description: El mensaje es obligatorio o supera el límite de caracteres
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Token ausente, inválido o vencido
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Usuario o billetera no encontrados
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "502":
+          description: El proveedor de IA no respondió
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Error interno del servidor
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
 components:
   securitySchemes:
     bearerAuth:
@@ -614,6 +672,18 @@ components:
       description: Ingresar el token de Firebase sin escribir la palabra Bearer.
 
   schemas:
+    AiAssistantInput:
+      type: object
+      properties:
+        message:
+          type: string
+          minLength: 1
+          maxLength: 1000
+          example: ¿Cuánto tengo en dólares?
+      required:
+        - message
+      additionalProperties: false
+
     ErrorResponse:
       type: object
       properties:
