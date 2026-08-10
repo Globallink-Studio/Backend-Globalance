@@ -33,11 +33,11 @@ export interface TransactionHistoryMovement {
 export interface TransactionHistoryItem {
   id: string;
   type:
-    | "income"
-    | "purchase"
-    | "sale"
-    | "conversion"
-    | "transfer";
+  | "income"
+  | "purchase"
+  | "sale"
+  | "conversion"
+  | "transfer";
   status: string;
   description: string | null;
   created_at: Date;
@@ -101,6 +101,10 @@ export interface InternalTransferRecord {
   created_at: Date;
 }
 
+export interface TransactionUserEmail {
+  email: string;
+}
+
 export class TransactionsRepository {
   async findWalletByUserId(
     client: PoolClient,
@@ -118,7 +122,23 @@ export class TransactionsRepository {
     return result.rows[0] ?? null;
   }
 
-    async findBalanceForUpdate(
+  async findUserEmailById(
+    client: PoolClient,
+    userId: string,
+  ): Promise<string | null> {
+    const result = await client.query<TransactionUserEmail>(
+      `
+      SELECT email
+      FROM users
+      WHERE id = $1
+    `,
+      [userId],
+    );
+
+    return result.rows[0]?.email ?? null;
+  }
+
+  async findBalanceForUpdate(
     client: PoolClient,
     walletId: string,
     currency: string,
@@ -137,7 +157,7 @@ export class TransactionsRepository {
     return result.rows[0] ?? null;
   }
 
-    async findDemoFundingByIdempotencyKey(
+  async findDemoFundingByIdempotencyKey(
     client: PoolClient,
     idempotencyKey: string,
     walletId: string,
@@ -169,7 +189,7 @@ export class TransactionsRepository {
     return result.rows[0] ?? null;
   }
 
-    async createIncomeTransaction(
+  async createIncomeTransaction(
     client: PoolClient,
     walletId: string,
     idempotencyKey: string,
@@ -193,7 +213,7 @@ export class TransactionsRepository {
     return result.rows[0].id;
   }
 
-    async createDemoIncome(
+  async createDemoIncome(
     client: PoolClient,
     transactionId: string,
   ): Promise<void> {
@@ -210,7 +230,7 @@ export class TransactionsRepository {
     );
   }
 
-    async increaseBalance(
+  async increaseBalance(
     client: PoolClient,
     balanceId: string,
     amount: string,
@@ -230,7 +250,7 @@ export class TransactionsRepository {
     return result.rows[0].amount;
   }
 
-    async createCreditMovement(
+  async createCreditMovement(
     client: PoolClient,
     transactionId: string,
     balanceId: string,
@@ -261,7 +281,7 @@ export class TransactionsRepository {
     );
   }
 
-    async findHistoryByWalletId(
+  async findHistoryByWalletId(
     client: PoolClient,
     walletId: string,
     transactionType: TransactionHistoryItem["type"] | null,
@@ -356,7 +376,7 @@ export class TransactionsRepository {
     return result.rows;
   }
 
-    async countMonthlyTransactions(
+  async countMonthlyTransactions(
     client: PoolClient,
     walletId: string,
     timezone = "America/Argentina/Buenos_Aires",
@@ -384,7 +404,7 @@ export class TransactionsRepository {
     return result.rows[0].total;
   }
 
-    async countDailyCompletedConversions(
+  async countDailyCompletedConversions(
     client: PoolClient,
     walletId: string,
     timezone = "America/Argentina/Buenos_Aires",
@@ -414,7 +434,7 @@ export class TransactionsRepository {
     return result.rows[0].total;
   }
 
-    async findExchangeByIdempotencyKey(
+  async findExchangeByIdempotencyKey(
     client: PoolClient,
     idempotencyKey: string,
     walletId: string,
@@ -466,7 +486,7 @@ export class TransactionsRepository {
           c.rate_provider,
           c.rate_fetched_at
       `,
-            [idempotencyKey, walletId],
+      [idempotencyKey, walletId],
     );
 
     return result.rows[0] ?? null;
@@ -500,7 +520,7 @@ export class TransactionsRepository {
     return result.rows[0] ?? null;
   }
 
-    async findTransferBalancesForUpdate(
+  async findTransferBalancesForUpdate(
     client: PoolClient,
     walletIds: [string, string],
     currency: string,
@@ -523,7 +543,7 @@ export class TransactionsRepository {
     return result.rows;
   }
 
-    async findInternalTransferByIdempotencyKey(
+  async findInternalTransferByIdempotencyKey(
     client: PoolClient,
     idempotencyKey: string,
     sourceWalletId: string,
@@ -568,7 +588,7 @@ export class TransactionsRepository {
     return result.rows[0] ?? null;
   }
 
-    async countDailyExchangeOperations(
+  async countDailyExchangeOperations(
     client: PoolClient,
     walletId: string,
     timezone = "America/Argentina/Buenos_Aires",
@@ -598,7 +618,7 @@ export class TransactionsRepository {
     return result.rows[0].total;
   }
 
-      async createExchangeTransaction(
+  async createExchangeTransaction(
     client: PoolClient,
     walletId: string,
     idempotencyKey: string,
@@ -659,7 +679,7 @@ export class TransactionsRepository {
     return result.rows[0].id;
   }
 
-    async createConversion(
+  async createConversion(
     client: PoolClient,
     transactionId: string,
     sourceCurrency: string,
@@ -704,7 +724,7 @@ export class TransactionsRepository {
       ],
     );
 
-        return result.rows[0].target_amount;
+    return result.rows[0].target_amount;
   }
 
   async createInternalTransferDetail(
@@ -740,7 +760,7 @@ export class TransactionsRepository {
     );
   }
 
-    async decreaseBalance(
+  async decreaseBalance(
     client: PoolClient,
     balanceId: string,
     amount: string,
@@ -761,7 +781,7 @@ export class TransactionsRepository {
     return result.rows[0]?.amount ?? null;
   }
 
-    async createDebitMovement(
+  async createDebitMovement(
     client: PoolClient,
     transactionId: string,
     balanceId: string,

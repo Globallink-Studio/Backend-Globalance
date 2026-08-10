@@ -8,6 +8,7 @@ import { transactionsRouter } from "../modules/transactions/transactions.routes"
 import { exchangeRouter } from "../modules/exchange/exchange.routes";
 import { paymentRequestsRouter } from "../modules/payment-requests/payment-requests.routes";
 import { aiRouter } from "../modules/ai/ai.routes";
+import { emailsRouter } from "../modules/emails/emails.routes";
 
 const router = Router();
 
@@ -20,5 +21,6 @@ router.use("/transactions", transactionsRouter);
 router.use("/exchange", exchangeRouter);
 router.use("/payment-requests", paymentRequestsRouter);
 router.use("/ai", aiRouter);
+router.use("/emails", emailsRouter);
 
 export default router;

@@ -34,6 +34,9 @@ tags:
   - name: Exchange
     description: Cotizaciones de cambio de moneda
 
+  - name: Emails
+    description: Reintento de notificaciones por correo electrónico
+
 paths:
   /health:
     get:
@@ -625,6 +628,28 @@ paths:
       responses:
         "200":
           description: Respuesta del asistente
+  /emails/deliveries/{deliveryId}/retry:
+    post:
+      tags:
+        - Emails
+      summary: Reintentar el envío de un correo fallido
+      description: >
+        Reintenta una notificación fallida. El usuario debe estar autenticado
+        con Firebase y pertenecer a la transferencia o solicitud de cobro
+        relacionada con el correo.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: deliveryId
+          in: path
+          required: true
+          description: Identificador UUID del intento de correo fallido
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Reintento procesado correctamente
           content:
             application/json:
               schema:
@@ -634,24 +659,64 @@ paths:
                     type: string
         "400":
           description: El mensaje es obligatorio o supera el límite de caracteres
+                  message:
+                    type: string
+                    example: Reintento de correo procesado correctamente
+                  result:
+                    type: object
+                    properties:
+                      status:
+                        type: string
+                        enum:
+                          - sent
+                          - failed
+                          - skipped
+                      deliveryId:
+                        type: string
+                        format: uuid
+                        nullable: true
+                      providerMessageId:
+                        type: string
+                        nullable: true
+                      errorMessage:
+                        type: string
+                        nullable: true
+        "400":
+          description: Identificador de entrega inválido
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
         "401":
           description: Token ausente, inválido o vencido
+          description: Usuario no autenticado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: El usuario no pertenece a la operación
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
         "404":
           description: Usuario o billetera no encontrados
+          description: No se encontró el correo fallido
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: El correo no tiene contenido o contexto disponible
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
         "502":
           description: El proveedor de IA no respondió
+        "503":
+          description: El envío de correos está deshabilitado
           content:
             application/json:
               schema:
