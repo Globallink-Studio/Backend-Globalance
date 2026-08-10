@@ -34,6 +34,9 @@ tags:
   - name: Exchange
     description: Cotizaciones de cambio de moneda
 
+  - name: Emails
+    description: Reintento de notificaciones por correo electrónico
+
 paths:
   /health:
     get:
@@ -605,6 +608,126 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /ai/assistant:
+    post:
+      tags:
+        - AI Assistant
+      summary: Enviar una consulta al asistente financiero
+      description: >
+        Devuelve una respuesta del asistente basada en el contexto del
+        usuario (saldos y movimientos recientes). Si no se configuró la
+        clave de Gemini, responde en modo demostración.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AiAssistantInput"
+      responses:
+        "200":
+          description: Respuesta del asistente
+  /emails/deliveries/{deliveryId}/retry:
+    post:
+      tags:
+        - Emails
+      summary: Reintentar el envío de un correo fallido
+      description: >
+        Reintenta una notificación fallida. El usuario debe estar autenticado
+        con Firebase y pertenecer a la transferencia o solicitud de cobro
+        relacionada con el correo.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: deliveryId
+          in: path
+          required: true
+          description: Identificador UUID del intento de correo fallido
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Reintento procesado correctamente
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  reply:
+                    type: string
+        "400":
+          description: El mensaje es obligatorio o supera el límite de caracteres
+                  message:
+                    type: string
+                    example: Reintento de correo procesado correctamente
+                  result:
+                    type: object
+                    properties:
+                      status:
+                        type: string
+                        enum:
+                          - sent
+                          - failed
+                          - skipped
+                      deliveryId:
+                        type: string
+                        format: uuid
+                        nullable: true
+                      providerMessageId:
+                        type: string
+                        nullable: true
+                      errorMessage:
+                        type: string
+                        nullable: true
+        "400":
+          description: Identificador de entrega inválido
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Token ausente, inválido o vencido
+          description: Usuario no autenticado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: El usuario no pertenece a la operación
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Usuario o billetera no encontrados
+          description: No se encontró el correo fallido
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: El correo no tiene contenido o contexto disponible
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "502":
+          description: El proveedor de IA no respondió
+        "503":
+          description: El envío de correos está deshabilitado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Error interno del servidor
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
 components:
   securitySchemes:
     bearerAuth:
@@ -614,6 +737,18 @@ components:
       description: Ingresar el token de Firebase sin escribir la palabra Bearer.
 
   schemas:
+    AiAssistantInput:
+      type: object
+      properties:
+        message:
+          type: string
+          minLength: 1
+          maxLength: 1000
+          example: ¿Cuánto tengo en dólares?
+      required:
+        - message
+      additionalProperties: false
+
     ErrorResponse:
       type: object
       properties:

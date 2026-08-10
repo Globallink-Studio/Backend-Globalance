@@ -12,6 +12,11 @@ import {
   PaymentRequestsRepository,
 } from "./payment-requests.repository";
 import { TransactionsRepository } from "../transactions/transactions.repository";
+import { EmailsService } from "../emails/emails.service";
+import {
+  createPaymentReceipt,
+  createPaymentRequestInvitation,
+} from "../emails/emails.templates";
 
 export interface CreatedPaymentRequest
   extends PaymentRequestRecord {
@@ -29,7 +34,9 @@ export class PaymentRequestsService {
       new PaymentRequestsRepository(),
     private readonly transactionsRepository =
       new TransactionsRepository(),
-  ) {}
+    private readonly emailsService =
+      new EmailsService(),
+  ) { }
 
   async createPaymentRequest(
     firebaseUid: string,
@@ -102,10 +109,26 @@ export class PaymentRequestsService {
 
       await client.query("COMMIT");
 
+      const paymentUrl =
+        `${env.FRONTEND_URL}/pay/${paymentRequest.payment_token}`;
+
+      await this.emailsService.sendTrackedEmail({
+        context: {
+          paymentRequestId: paymentRequest.id,
+        },
+        event: "payment_request_created",
+        recipientEmail: payer.email,
+        content: createPaymentRequestInvitation({
+          requesterName: requester.email,
+          amount: paymentRequest.amount,
+          currency: paymentRequest.currency_code,
+          paymentUrl,
+        }),
+      });
+
       return {
         ...paymentRequest,
-        payment_url:
-          `${env.FRONTEND_URL}/pay/${paymentRequest.payment_token}`,
+        payment_url: paymentUrl,
       };
     } catch (error) {
       await client.query("ROLLBACK");
@@ -115,7 +138,7 @@ export class PaymentRequestsService {
     }
   }
 
-    async cancelPaymentRequest(
+  async cancelPaymentRequest(
     firebaseUid: string,
     paymentRequestId: string,
   ): Promise<PaymentRequestRecord> {
@@ -210,7 +233,7 @@ export class PaymentRequestsService {
     }
   }
 
-    async payPaymentRequest(
+  async payPaymentRequest(
     firebaseUid: string,
     paymentToken: string,
     idempotencyKey: string,
@@ -279,9 +302,12 @@ export class PaymentRequestsService {
       }
 
       if (paymentRequest.status === "paid") {
-        await client.query("COMMIT");
-        transactionFinished = true;
-        return paymentRequest;
+        if (paymentRequest.status === "paid") {
+          await client.query("COMMIT");
+          transactionFinished = true;
+
+          return paymentRequest;
+        }
       }
 
       if (
@@ -463,6 +489,33 @@ export class PaymentRequestsService {
       await client.query("COMMIT");
       transactionFinished = true;
 
+      await Promise.all([
+        this.emailsService.sendTrackedEmail({
+          context: { transactionId },
+          event: "payment_request_paid",
+          recipientEmail: payer.email,
+          content: createPaymentReceipt({
+            recipientRole: "payer",
+            counterpartName: requester.email,
+            amount: paymentRequest.amount,
+            currency: paymentRequest.currency_code,
+            transactionId,
+          }),
+        }),
+        this.emailsService.sendTrackedEmail({
+          context: { transactionId },
+          event: "payment_request_paid",
+          recipientEmail: requester.email,
+          content: createPaymentReceipt({
+            recipientRole: "receiver",
+            counterpartName: payer.email,
+            amount: paymentRequest.amount,
+            currency: paymentRequest.currency_code,
+            transactionId,
+          }),
+        }),
+      ]);
+
       return paidPaymentRequest;
     } catch (error) {
       if (!transactionFinished) {
@@ -475,7 +528,7 @@ export class PaymentRequestsService {
     }
   }
 
-    async getPaymentRequestByToken(
+  async getPaymentRequestByToken(
     firebaseUid: string,
     paymentToken: string,
   ): Promise<PaymentRequestDetails> {
@@ -570,7 +623,7 @@ export class PaymentRequestsService {
     }
   }
 
-    async listPaymentRequests(
+  async listPaymentRequests(
     firebaseUid: string,
     query: ListPaymentRequestsQuery,
   ): Promise<PaymentRequestListItem[]> {

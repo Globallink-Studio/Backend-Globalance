@@ -17,8 +17,14 @@ export const env = {
   DEMO_FUNDING_ENABLED: process.env.DEMO_FUNDING_ENABLED === "true",
   EXCHANGE_RATE_API_KEY: process.env.EXCHANGE_RATE_API_KEY ?? "",
   GEMINI_API_KEY: process.env.GEMINI_API_KEY ?? "",
+  GEMINI_MODEL: process.env.GEMINI_MODEL ?? "gemini-2.5-flash",
 
   FIREBASE_PROJECT_ID: required("FIREBASE_PROJECT_ID"),
   FIREBASE_CLIENT_EMAIL: required("FIREBASE_CLIENT_EMAIL"),
   FIREBASE_PRIVATE_KEY: required("FIREBASE_PRIVATE_KEY"),
+
+  EMAIL_DELIVERY_ENABLED: process.env.EMAIL_DELIVERY_ENABLED === "true",
+  AWS_REGION: process.env.AWS_REGION ?? "sa-east-1",
+  SES_FROM_EMAIL: process.env.SES_FROM_EMAIL ?? "",
+
 };
