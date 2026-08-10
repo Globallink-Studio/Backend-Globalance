@@ -37,6 +37,7 @@ tags:
 paths:
   /health:
     get:
+      security: []
       tags:
         - Health
       summary: Verificar el estado del backend
@@ -280,6 +281,103 @@ paths:
           description: >
             Conflicto con el estado del recurso: alias o documento duplicado,
             o intento de modificar el tipo de usuario (USER_TYPE_NOT_EDITABLE).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Error interno del servidor
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /transactions:
+    get:
+      tags:
+        - Transactions
+      summary: Obtener el historial de movimientos
+      description: >
+        Devuelve los movimientos del usuario ordenados de más reciente a más
+        antiguo. Admite filtros por tipo de operación, moneda y paginación por
+        límite y desplazamiento.
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: type
+          required: false
+          schema:
+            type: string
+            enum:
+              - income
+              - purchase
+              - sale
+              - conversion
+              - transfer
+          description: Filtra por tipo de operación.
+        - in: query
+          name: currency
+          required: false
+          schema:
+            type: string
+            enum:
+              - ARS
+              - USD
+              - EUR
+          description: Filtra por moneda involucrada.
+        - in: query
+          name: limit
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+          description: Cantidad máxima de movimientos a devolver.
+        - in: query
+          name: offset
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+          description: Cantidad de movimientos a saltear (para paginar).
+      responses:
+        "200":
+          description: Historial de movimientos
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  transactions:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Transaction"
+                  pagination:
+                    type: object
+                    properties:
+                      limit:
+                        type: integer
+                      offset:
+                        type: integer
+                      returned:
+                        type: integer
+        "400":
+          description: Filtros de consulta inválidos
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Token ausente, inválido o vencido
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Usuario o billetera no encontrados
           content:
             application/json:
               schema:
@@ -854,6 +952,88 @@ components:
           type: string
         target_balance_after:
           type: string
+
+    Transaction:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        type:
+          type: string
+          enum:
+            - income
+            - purchase
+            - sale
+            - conversion
+            - transfer
+        status:
+          type: string
+        description:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        completed_at:
+          type: string
+          format: date-time
+          nullable: true
+        source_currency:
+          type: string
+          nullable: true
+        target_currency:
+          type: string
+          nullable: true
+        applied_rate:
+          type: string
+          nullable: true
+        rate_provider:
+          type: string
+          nullable: true
+          enum:
+            - frankfurter
+            - exchange_rate_api
+        rate_fetched_at:
+          type: string
+          format: date-time
+          nullable: true
+        destination_wallet_id:
+          type: string
+          format: uuid
+          nullable: true
+        recipient_name:
+          type: string
+          nullable: true
+        funding_method:
+          type: string
+          nullable: true
+        movements:
+          type: array
+          items:
+            type: object
+            properties:
+              direction:
+                type: string
+                enum:
+                  - debit
+                  - credit
+              concept:
+                type: string
+                enum:
+                  - principal
+                  - fee
+              currency:
+                type: string
+              amount:
+                type: string
+              balance_before:
+                type: string
+              balance_after:
+                type: string
+              created_at:
+                type: string
+                format: date-time
 
     Quote:
       type: object

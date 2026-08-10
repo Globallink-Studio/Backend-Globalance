@@ -1,5 +1,6 @@
 import { env } from "../../config/env";
 import { pool } from "../../db/pool";
+import { TransactionsServiceError } from "../../errors/service-errors";
 import { findUserByFirebaseUid } from "../auth/auth.repository";
 import {
   RateProvider,
@@ -9,26 +10,17 @@ import type {
   DemoFundingInput,
   ExchangeInput,
   InternalTransferInput,
+  ListTransactionsQuery,
 } from "./transactions.schema";
 import {
   DemoFundingRecord,
   ExchangeRecord,
   InternalTransferRecord,
+  TransactionHistoryItem,
   TransactionsRepository,
 } from "./transactions.repository";
 import { EmailsService } from "../emails/emails.service";
 import { createTransferReceipt } from "../emails/emails.templates";
-
-export class TransactionsServiceError extends Error {
-  constructor(
-    public readonly statusCode: number,
-    public readonly code: string,
-    message: string,
-  ) {
-    super(message);
-    this.name = "TransactionsServiceError";
-  }
-}
 
 const EXCHANGE_DAILY_LIMIT = 30;
 
@@ -739,6 +731,60 @@ export class TransactionsService {
       }
 
       throw error;
+    }
+  }
+
+  async listTransactions(
+    firebaseUid: string,
+    query: ListTransactionsQuery,
+  ): Promise<TransactionHistoryItem[]> {
+    const client = await pool.connect();
+
+    try {
+      await client.query("BEGIN");
+
+      const user = await findUserByFirebaseUid(client, firebaseUid);
+
+      if (!user) {
+        throw new TransactionsServiceError(
+          404,
+          "USER_NOT_FOUND",
+          "Usuario no encontrado",
+        );
+      }
+
+      const wallet =
+        await this.transactionsRepository.findWalletByUserId(
+          client,
+          user.id,
+        );
+
+      if (!wallet) {
+        throw new TransactionsServiceError(
+          404,
+          "WALLET_NOT_FOUND",
+          "Billetera no encontrada",
+        );
+      }
+
+      const transactions =
+        await this.transactionsRepository.findHistoryByWalletId(
+          client,
+          wallet.id,
+          query.type ?? null,
+          query.currency ?? null,
+          query.limit,
+          query.offset,
+        );
+
+      await client.query("COMMIT");
+
+      return transactions;
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
     }
   }
 }

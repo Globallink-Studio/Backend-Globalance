@@ -9,8 +9,8 @@ import type {
 } from "./payment-requests.schema";
 import {
   PaymentRequestsService,
-  PaymentRequestsServiceError,
 } from "./payment-requests.service";
+import { PaymentRequestsServiceError } from "../../errors/service-errors";
 import {
   listPaymentRequestsQuerySchema,
   paymentRequestIdSchema,
