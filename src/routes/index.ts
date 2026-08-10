@@ -9,6 +9,7 @@ import { exchangeRouter } from "../modules/exchange/exchange.routes";
 import { paymentRequestsRouter } from "../modules/payment-requests/payment-requests.routes";
 import { aiRouter } from "../modules/ai/ai.routes";
 import { emailsRouter } from "../modules/emails/emails.routes";
+import { contactsRouter } from "../modules/contacts/contacts.routes";
 
 const router = Router();
 
@@ -22,5 +23,6 @@ router.use("/exchange", exchangeRouter);
 router.use("/payment-requests", paymentRequestsRouter);
 router.use("/ai", aiRouter);
 router.use("/emails", emailsRouter);
+router.use("/contacts", contactsRouter);
 
 export default router;
