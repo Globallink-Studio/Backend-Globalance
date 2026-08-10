@@ -21,8 +21,8 @@ export const env = {
   FIREBASE_CLIENT_EMAIL: required("FIREBASE_CLIENT_EMAIL"),
   FIREBASE_PRIVATE_KEY: required("FIREBASE_PRIVATE_KEY"),
 
-  EMAIL_DELIVERY_ENABLED:
-    process.env.EMAIL_DELIVERY_ENABLED === "true",
+  EMAIL_DELIVERY_ENABLED: process.env.EMAIL_DELIVERY_ENABLED === "true",
   AWS_REGION: process.env.AWS_REGION ?? "sa-east-1",
   SES_FROM_EMAIL: process.env.SES_FROM_EMAIL ?? "",
+
 };
