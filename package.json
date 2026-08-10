@@ -2,6 +2,7 @@
   "name": "backend-globalance",
   "version": "1.0.0",
   "dependencies": {
+    "@aws-sdk/client-sesv2": "^3.1106.0",
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
