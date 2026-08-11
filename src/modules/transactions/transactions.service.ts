@@ -20,7 +20,11 @@ import {
   TransactionsRepository,
 } from "./transactions.repository";
 import { EmailsService } from "../emails/emails.service";
-import { createTransferReceipt } from "../emails/emails.templates";
+import {
+  createExchangeReceipt,
+  createIncomeReceipt,
+  createTransferReceipt,
+} from "../emails/emails.templates";
 
 const EXCHANGE_DAILY_LIMIT = 30;
 
@@ -172,6 +176,18 @@ export class TransactionsService {
       }
 
       await client.query("COMMIT");
+
+      await this.emailsService.sendTrackedEmail({
+        context: { transactionId },
+        event: "income_completed",
+        recipientEmail: user.email,
+        content: createIncomeReceipt({
+          amount: input.amount,
+          currency: input.currency,
+          transactionId,
+          newBalance: String(balanceAfter),
+        }),
+      });
 
       return createdTransaction;
     } catch (error) {
@@ -418,6 +434,20 @@ export class TransactionsService {
       }
 
       await client.query("COMMIT");
+
+      await this.emailsService.sendTrackedEmail({
+        context: { transactionId },
+        event: "exchange_completed",
+        recipientEmail: user.email,
+        content: createExchangeReceipt({
+          sourceAmount: input.sourceAmount,
+          sourceCurrency: input.sourceCurrency,
+          targetAmount,
+          targetCurrency: input.targetCurrency,
+          rate: String(exchangeRate.rate),
+          transactionId,
+        }),
+      });
 
       return createdTransaction;
     } catch (error) {

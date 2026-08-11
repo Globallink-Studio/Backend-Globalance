@@ -1,9 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { fakeClient } = vi.hoisted(() => ({
+const { fakeClient, emailsServiceMock } = vi.hoisted(() => ({
   fakeClient: {
     query: vi.fn(),
     release: vi.fn(),
+  },
+  emailsServiceMock: {
+    sendTrackedEmail: vi.fn(),
   },
 }));
 
@@ -22,6 +25,10 @@ vi.mock("../src/modules/transactions/transactions.repository", () => ({
 vi.mock("../src/modules/exchange/rate-provider", () => ({
   RateProvider: vi.fn(),
   RateProviderError: class RateProviderError extends Error {},
+}));
+
+vi.mock("../src/modules/emails/emails.service", () => ({
+  EmailsService: vi.fn(),
 }));
 
 import { pool } from "../src/db/pool";
@@ -78,6 +85,7 @@ describe("TransactionsService.createExchange", () => {
     service = new TransactionsService(
       repositoryMock as unknown as TransactionsRepository,
       rateProviderMock as unknown as RateProvider,
+      emailsServiceMock as unknown as never,
     );
 
     (pool.connect as ReturnType<typeof vi.fn>).mockResolvedValue(
@@ -89,6 +97,7 @@ describe("TransactionsService.createExchange", () => {
     user = {
       id: "u1",
       firebase_uid: "fb1",
+      email: "manu@globalance.com",
       status: "active",
       display_currency: "ARS",
       timezone: "America/Argentina/Buenos_Aires",
@@ -103,6 +112,9 @@ describe("TransactionsService.createExchange", () => {
     repositoryMock.findExchangeByIdempotencyKey.mockResolvedValue(
       null,
     );
+    emailsServiceMock.sendTrackedEmail.mockResolvedValue({
+      status: "skipped",
+    });
   });
 
   it("devuelve la transacción existente si la Idempotency-Key ya se usó", async () => {
@@ -210,6 +222,50 @@ describe("TransactionsService.createExchange", () => {
     expect(fakeClient.query).toHaveBeenCalledWith("COMMIT");
   });
 
+  it("envía el correo de cambio al completar la conversión", async () => {
+    repositoryMock.countDailyExchangeOperations.mockResolvedValue(
+      0,
+    );
+    repositoryMock.findBalanceForUpdate.mockImplementation(
+      async (
+        _client: unknown,
+        _walletId: unknown,
+        currency: string,
+      ) =>
+        currency === "USD"
+          ? { id: "b-usd", wallet_id: "w1", amount: "1000" }
+          : { id: "b-ars", wallet_id: "w1", amount: "0" },
+    );
+    repositoryMock.createExchangeTransaction.mockResolvedValue(
+      "tx-1",
+    );
+    repositoryMock.createConversion.mockResolvedValue("149812.00");
+    repositoryMock.decreaseBalance.mockResolvedValue("900");
+    repositoryMock.increaseBalance.mockResolvedValue("149812.00");
+    repositoryMock.findExchangeByIdempotencyKey
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({
+        transaction_id: "tx-1",
+        type: "sale",
+        status: "completed",
+        source_currency: "USD",
+        target_currency: "ARS",
+      });
+
+    await service.createExchange("fb1", input, "key-1");
+
+    expect(
+      emailsServiceMock.sendTrackedEmail,
+    ).toHaveBeenCalledWith({
+      context: { transactionId: "tx-1" },
+      event: "exchange_completed",
+      recipientEmail: "manu@globalance.com",
+      content: expect.objectContaining({
+        subject: "Cambio de USD a ARS en Globalance",
+      }),
+    });
+  });
+
   it("propaga errores del servicio con su código", async () => {
     const error = new TransactionsServiceError(
       422,
@@ -242,6 +298,7 @@ describe("TransactionsService.listTransactions", () => {
     service = new TransactionsService(
       repositoryMock as unknown as TransactionsRepository,
       undefined as unknown as RateProvider,
+      emailsServiceMock as unknown as never,
     );
 
     (pool.connect as ReturnType<typeof vi.fn>).mockResolvedValue(
