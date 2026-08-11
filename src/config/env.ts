@@ -17,7 +17,7 @@ export const env = {
   DEMO_FUNDING_ENABLED: process.env.DEMO_FUNDING_ENABLED === "true",
   EXCHANGE_RATE_API_KEY: process.env.EXCHANGE_RATE_API_KEY ?? "",
   GEMINI_API_KEY: process.env.GEMINI_API_KEY ?? "",
-  GEMINI_MODEL: process.env.GEMINI_MODEL ?? "gemini-2.5-flash",
+  GEMINI_MODEL: process.env.GEMINI_MODEL ?? "gemini-3.1-flash-lite",
 
   FIREBASE_PROJECT_ID: required("FIREBASE_PROJECT_ID"),
   FIREBASE_CLIENT_EMAIL: required("FIREBASE_CLIENT_EMAIL"),

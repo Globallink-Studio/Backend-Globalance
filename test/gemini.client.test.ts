@@ -1,20 +1,27 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { GeminiClient, GeminiClientError } from "../src/modules/ai/gemini.client";
+import {
+  GeminiClient,
+  GeminiClientError,
+  GeminiNotConfiguredError,
+} from "../src/modules/ai/gemini.client";
 
 afterEach(() => {
   vi.unstubAllGlobals();
 });
 
 describe("GeminiClient", () => {
-  it("responde en modo mock cuando no hay apiKey", async () => {
+  it("lanza error de configuración cuando no hay apiKey", async () => {
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
 
-    const client = new GeminiClient({ apiKey: "", model: "gemini-2.5-flash" });
+    const client = new GeminiClient({
+      apiKey: "",
+      model: "gemini-3.1-flash-lite",
+    });
 
-    const reply = await client.generate("hola");
-
-    expect(reply).toContain("modo demostración");
+    await expect(client.generate("hola")).rejects.toBeInstanceOf(
+      GeminiNotConfiguredError,
+    );
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
@@ -46,6 +53,10 @@ describe("GeminiClient", () => {
         method: "POST",
         body: JSON.stringify({
           contents: [{ parts: [{ text: "¿Cuánto tengo?" }] }],
+          generationConfig: {
+            temperature: 0.2,
+            maxOutputTokens: 500,
+          },
         }),
       }),
     );

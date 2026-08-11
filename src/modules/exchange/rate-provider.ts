@@ -1,5 +1,6 @@
 import { env } from "../../config/env";
 import { findValidRate, upsertRate } from "./rate-cache.repository";
+import { upsertDailyQuote } from "./quote-history.repository";
 
 export type RateProviderName = "frankfurter" | "exchange_rate_api";
 
@@ -36,11 +37,13 @@ export class RateProvider {
     try {
       const rate = await this.fetchFrankfurter(source, target);
       await this.storeCache(rate);
+      await this.storeDailyQuote(rate);
       return rate;
     } catch {
       try {
         const rate = await this.fetchExchangeRateApi(source, target);
         await this.storeCache(rate);
+        await this.storeDailyQuote(rate);
         return rate;
       } catch {
         throw new RateProviderError(
@@ -75,6 +78,14 @@ export class RateProvider {
       await upsertRate(rate, expiresAt);
     } catch {
       // La cache es un refuerzo: si falla, la tasa en vivo igual se devuelve.
+    }
+  }
+
+  private async storeDailyQuote(rate: ExchangeRate): Promise<void> {
+    try {
+      await upsertDailyQuote(rate, new Date());
+    } catch {
+      // El historial es un refuerzo: si falla, la tasa en vivo igual se devuelve.
     }
   }
 

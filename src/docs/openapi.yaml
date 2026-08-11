@@ -757,8 +757,11 @@ paths:
       summary: Enviar una consulta al asistente financiero
       description: >
         Devuelve una respuesta del asistente basada en el contexto del
-        usuario (saldos y movimientos recientes). Si no se configuró la
-        clave de Gemini, responde en modo demostración.
+        usuario (saldos, movimientos recientes y tasas de cambio del
+        momento). El asistente es solo informativo: responde consultas y
+        cotizaciones, pero no ejecuta operaciones ni da predicciones. Si
+        no se configuró GEMINI_API_KEY, responde 503 con AI_NOT_CONFIGURED.
+        Responde 502 AI_PROVIDER_UNAVAILABLE si el proveedor de IA falla.
       security:
         - bearerAuth: []
       requestBody:
@@ -792,6 +795,12 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
         "502":
           description: El proveedor de IA no respondió
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: GEMINI_API_KEY no está configurada (AI_NOT_CONFIGURED)
           content:
             application/json:
               schema:
