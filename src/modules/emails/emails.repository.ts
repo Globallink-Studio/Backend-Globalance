@@ -5,7 +5,9 @@ export type EmailDeliveryEvent =
   | "failed"
   | "payment_request_created"
   | "payment_request_paid"
-  | "transfer_completed";
+  | "transfer_completed"
+  | "income_completed"
+  | "exchange_completed";
 
 export type EmailDeliveryContext =
   | {

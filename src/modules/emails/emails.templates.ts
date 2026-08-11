@@ -27,6 +27,22 @@ interface TransferReceiptInput {
   transactionId: string;
 }
 
+interface IncomeReceiptInput {
+  amount: string;
+  currency: string;
+  transactionId: string;
+  newBalance: string;
+}
+
+interface ExchangeReceiptInput {
+  sourceAmount: string;
+  sourceCurrency: string;
+  targetAmount: string;
+  targetCurrency: string;
+  rate: string;
+  transactionId: string;
+}
+
 function escapeHtml(value: string): string {
   return value
     .replaceAll("&", "&amp;")
@@ -117,6 +133,57 @@ export function createTransferReceipt(
     textBody:
       `${action}. Contraparte: ${input.counterpartName}. ` +
       `Importe: ${input.amount} ${input.currency}. ` +
+      `Transacción: ${input.transactionId}.`,
+  };
+}
+
+export function createIncomeReceipt(
+  input: IncomeReceiptInput,
+): EmailContent {
+  const amount = escapeHtml(input.amount);
+  const currency = escapeHtml(input.currency);
+  const transactionId = escapeHtml(input.transactionId);
+  const newBalance = escapeHtml(input.newBalance);
+
+  return {
+    subject: "Carga de saldo en Globalance",
+    htmlBody: `
+      <h1>Carga de saldo</h1>
+      <p><strong>Importe acreditado:</strong> ${amount} ${currency}</p>
+      <p><strong>Saldo actual:</strong> ${newBalance} ${currency}</p>
+      <p><strong>Transacción:</strong> ${transactionId}</p>
+    `,
+    textBody:
+      `Carga de saldo. Importe acreditado: ${input.amount} ` +
+      `${input.currency}. Saldo actual: ${input.newBalance} ` +
+      `${input.currency}. Transacción: ${input.transactionId}.`,
+  };
+}
+
+export function createExchangeReceipt(
+  input: ExchangeReceiptInput,
+): EmailContent {
+  const sourceAmount = escapeHtml(input.sourceAmount);
+  const sourceCurrency = escapeHtml(input.sourceCurrency);
+  const targetAmount = escapeHtml(input.targetAmount);
+  const targetCurrency = escapeHtml(input.targetCurrency);
+  const rate = escapeHtml(input.rate);
+  const transactionId = escapeHtml(input.transactionId);
+
+  return {
+    subject: `Cambio de ${sourceCurrency} a ${targetCurrency} en Globalance`,
+    htmlBody: `
+      <h1>Cambio de moneda</h1>
+      <p><strong>Enviaste:</strong> ${sourceAmount} ${sourceCurrency}</p>
+      <p><strong>Recibiste:</strong> ${targetAmount} ${targetCurrency}</p>
+      <p><strong>Tasa aplicada:</strong> 1 ${sourceCurrency} = ${rate} ${targetCurrency}</p>
+      <p><strong>Transacción:</strong> ${transactionId}</p>
+    `,
+    textBody:
+      `Cambio de ${input.sourceCurrency} a ${input.targetCurrency}. ` +
+      `Enviaste ${input.sourceAmount} ${input.sourceCurrency}. ` +
+      `Recibiste ${input.targetAmount} ${input.targetCurrency}. ` +
+      `Tasa aplicada: 1 ${input.sourceCurrency} = ${input.rate} ${input.targetCurrency}. ` +
       `Transacción: ${input.transactionId}.`,
   };
 }
