@@ -4,7 +4,10 @@ import type {
   Response,
 } from "express";
 import { AiService } from "./ai.service";
-import { GeminiClientError } from "./gemini.client";
+import {
+  GeminiClientError,
+  GeminiNotConfiguredError,
+} from "./gemini.client";
 
 export class AiController {
   constructor(
@@ -38,6 +41,16 @@ export class AiController {
 
       res.status(200).json({ reply });
     } catch (error) {
+      if (error instanceof GeminiNotConfiguredError) {
+        res.status(503).json({
+          error: {
+            code: "AI_NOT_CONFIGURED",
+            message: error.message,
+          },
+        });
+        return;
+      }
+
       if (error instanceof GeminiClientError) {
         res.status(502).json({
           error: {

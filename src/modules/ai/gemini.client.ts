@@ -7,6 +7,15 @@ export class GeminiClientError extends Error {
   }
 }
 
+export class GeminiNotConfiguredError extends GeminiClientError {
+  constructor() {
+    super(
+      "La integración con Gemini no está configurada: falta GEMINI_API_KEY",
+    );
+    this.name = "GeminiNotConfiguredError";
+  }
+}
+
 const REQUEST_TIMEOUT_MS = 15000;
 const GENERATE_CONTENT_PATH =
   "https://generativelanguage.googleapis.com/v1beta";
@@ -14,20 +23,31 @@ const GENERATE_CONTENT_PATH =
 export interface GeminiClientConfig {
   apiKey: string;
   model: string;
+  temperature: number;
+  maxOutputTokens: number;
 }
+
+export const GEMINI_DEFAULT_TEMPERATURE = 0.2;
+export const GEMINI_DEFAULT_MAX_OUTPUT_TOKENS = 500;
 
 export class GeminiClient {
   private readonly apiKey: string;
   private readonly model: string;
+  private readonly temperature: number;
+  private readonly maxOutputTokens: number;
 
   constructor(config?: Partial<GeminiClientConfig>) {
     this.apiKey = config?.apiKey ?? env.GEMINI_API_KEY;
     this.model = config?.model ?? env.GEMINI_MODEL;
+    this.temperature =
+      config?.temperature ?? GEMINI_DEFAULT_TEMPERATURE;
+    this.maxOutputTokens =
+      config?.maxOutputTokens ?? GEMINI_DEFAULT_MAX_OUTPUT_TOKENS;
   }
 
   async generate(prompt: string): Promise<string> {
     if (!this.apiKey) {
-      return this.mockReply();
+      throw new GeminiNotConfiguredError();
     }
 
     try {
@@ -44,6 +64,10 @@ export class GeminiClient {
                 parts: [{ text: prompt }],
               },
             ],
+            generationConfig: {
+              temperature: this.temperature,
+              maxOutputTokens: this.maxOutputTokens,
+            },
           }),
           signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
         },
@@ -80,14 +104,5 @@ export class GeminiClient {
         "No se pudo contactar al proveedor de IA",
       );
     }
-  }
-
-  private mockReply(): string {
-    return (
-      "Estoy funcionando en modo demostración: todavía no se " +
-      "configuró la clave de Gemini. Cuando se active la " +
-      "integración, podré analizar tus saldos y movimientos en " +
-      "detalle para responder consultas sobre tu cuenta."
-    );
   }
 }

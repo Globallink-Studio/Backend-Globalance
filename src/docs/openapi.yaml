@@ -1157,6 +1157,472 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /ai/assistant:
+    post:
+      tags:
+        - AI Assistant
+      summary: Enviar una consulta al asistente financiero
+      description: >
+        Devuelve una respuesta del asistente basada en el contexto del
+        usuario (saldos, movimientos recientes y tasas de cambio del
+        momento). El asistente es solo informativo: responde consultas y
+        cotizaciones, pero no ejecuta operaciones ni da predicciones. Si
+        no se configuró GEMINI_API_KEY, responde 503 con AI_NOT_CONFIGURED.
+        Responde 502 AI_PROVIDER_UNAVAILABLE si el proveedor de IA falla.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AiAssistantInput"
+      responses:
+        "200":
+          description: Respuesta del asistente
+  /emails/deliveries/{deliveryId}/retry:
+    post:
+      tags:
+        - Emails
+      summary: Reintentar el envío de un correo fallido
+      description: >
+        Reintenta una notificación fallida. El usuario debe estar autenticado
+        con Firebase y pertenecer a la transferencia o solicitud de cobro
+        relacionada con el correo.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: deliveryId
+          in: path
+          required: true
+          description: Identificador UUID del intento de correo fallido
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Reintento procesado correctamente
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  reply:
+                    type: string
+                    example: "Tu saldo en dólares es de 1500 USD."
+        "400":
+          description: El mensaje es obligatorio o supera el límite de caracteres
+                  message:
+                    type: string
+                    example: Reintento de correo procesado correctamente
+                  result:
+                    type: object
+                    properties:
+                      status:
+                        type: string
+                        enum:
+                          - sent
+                          - failed
+                          - skipped
+                      deliveryId:
+                        type: string
+                        format: uuid
+                        nullable: true
+                      providerMessageId:
+                        type: string
+                        nullable: true
+                      errorMessage:
+                        type: string
+                        nullable: true
+        "400":
+          description: Identificador de entrega inválido
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Token ausente, inválido o vencido
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "502":
+          description: El proveedor de IA no respondió
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: GEMINI_API_KEY no está configurada (AI_NOT_CONFIGURED)
+        "404":
+          description: No se encontró el correo fallido o usuario/billetera no encontrados
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Error interno del servidor
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /payment-requests:
+    post:
+      tags:
+        - Payment Requests
+      summary: Crear una solicitud de cobro
+      description: >
+        Crea una solicitud de cobro pendiente para un pagador identificado
+        por su correo electrónico.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreatePaymentRequestInput"
+      responses:
+        "201":
+          description: Solicitud de cobro creada correctamente
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Solicitud de cobro creada correctamente
+                  paymentRequest:
+                    $ref: "#/components/schemas/PaymentRequest"
+        "400":
+          description: Datos de la solicitud inválidos
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Token ausente, inválido o vencido
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Usuario solicitante no encontrado o pagador no registrado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Intento de crear una solicitud de cobro a uno mismo u otro conflicto
+        "503":
+          description: El envío de correos está deshabilitado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Error interno del servidor
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+    get:
+      tags:
+        - Payment Requests
+      summary: Listar solicitudes de cobro
+      description: >
+        Devuelve la lista de solicitudes de cobro en las que participa el usuario,
+        ya sea como creador (sent) o como pagador (received).
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: scope
+          required: true
+          schema:
+            type: string
+            enum:
+              - sent
+              - received
+          description: "Filtrar por rol: enviadas o recibidas."
+        - in: query
+          name: status
+          required: false
+          schema:
+            type: string
+            enum:
+              - pending
+              - paid
+              - expired
+              - cancelled
+          description: Filtrar por estado.
+        - in: query
+          name: limit
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+          description: Cantidad máxima de solicitudes a devolver.
+        - in: query
+          name: offset
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+          description: Desplazamiento para paginar.
+      responses:
+        "200":
+          description: Listado obtenido correctamente
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  paymentRequests:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/PaymentRequest"
+                  pagination:
+                    type: object
+                    properties:
+                      limit:
+                        type: integer
+                      offset:
+                        type: integer
+                      returned:
+                        type: integer
+        "400":
+          description: Parámetros de búsqueda inválidos
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Token ausente, inválido o vencido
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Error interno del servidor
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /payment-requests/{paymentToken}:
+    get:
+      tags:
+        - Payment Requests
+      summary: Consultar solicitud de cobro por token
+      description: >
+        Devuelve los detalles de una solicitud de cobro a partir de su token de
+        pago. El usuario autenticado debe ser el pagador.
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: paymentToken
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Token de pago único de la solicitud
+      responses:
+        "200":
+          description: Solicitud obtenida correctamente
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  paymentRequest:
+                    $ref: "#/components/schemas/PaymentRequest"
+        "400":
+          description: Token de pago inválido
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Token ausente, inválido o vencido
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: El usuario no es el pagador de la solicitud
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Solicitud de cobro no encontrada
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Error interno del servidor
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /payment-requests/{paymentToken}/pay:
+    post:
+      tags:
+        - Payment Requests
+      summary: Pagar una solicitud de cobro
+      description: >
+        Realiza el pago de una solicitud de cobro pendiente. Se debita el saldo de
+        la billetera del pagador y se acredita en la del creador.
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: paymentToken
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Token de pago único de la solicitud
+        - in: header
+          name: Idempotency-Key
+          required: true
+          schema:
+            type: string
+            maxLength: 100
+          description: Clave de idempotencia para evitar duplicados.
+      responses:
+        "200":
+          description: Solicitud pagada correctamente
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Solicitud de cobro pagada correctamente
+                  paymentRequest:
+                    $ref: "#/components/schemas/PaymentRequest"
+        "400":
+          description: Token de pago inválido o falta encabezado Idempotency-Key
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Token ausente, inválido o vencido
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: El usuario no es el pagador de la solicitud
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Solicitud no encontrada o billetera/saldo inexistente
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: La solicitud ya no está pendiente o conflicto en la transacción
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: Saldo insuficiente en la billetera del pagador
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Error interno del servidor
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /payment-requests/{id}/cancel:
+    patch:
+      tags:
+        - Payment Requests
+      summary: Cancelar una solicitud de cobro
+      description: >
+        Cancela una solicitud de cobro pendiente de la cual el usuario es el creador.
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Identificador UUID de la solicitud de cobro
+      responses:
+        "200":
+          description: Solicitud cancelada correctamente
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Solicitud de cobro cancelada correctamente
+                  paymentRequest:
+                    $ref: "#/components/schemas/PaymentRequest"
+        "400":
+          description: Identificador de la solicitud inválido
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Token ausente, inválido o vencido
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: El usuario no es el creador de la solicitud
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Solicitud de cobro no encontrada
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: La solicitud ya no está pendiente
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Error interno del servidor
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /emails/deliveries/{deliveryId}/retry:
     post:
       tags:
