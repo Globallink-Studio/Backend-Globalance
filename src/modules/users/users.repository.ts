@@ -138,6 +138,103 @@ export async function upsertPersonProfile(
   return rows[0];
 }
 
+type UpdatePersonProfileParams = {
+  userId: string;
+  firstName?: string;
+  lastName?: string;
+  phone?: string;
+};
+
+export async function updatePersonProfile(
+  client: PoolClient,
+  { userId, firstName, lastName, phone }: UpdatePersonProfileParams,
+) {
+  const sets: string[] = [];
+  const values: unknown[] = [];
+  let index = 1;
+
+  if (firstName !== undefined) {
+    sets.push(`first_name = $${index}`);
+    values.push(firstName);
+    index += 1;
+  }
+
+  if (lastName !== undefined) {
+    sets.push(`last_name = $${index}`);
+    values.push(lastName);
+    index += 1;
+  }
+
+  if (phone !== undefined) {
+    sets.push(`phone = $${index}`);
+    values.push(phone);
+    index += 1;
+  }
+
+  if (sets.length === 0) {
+    return null;
+  }
+
+  values.push(userId);
+
+  const { rows } = await client.query(
+    `
+      UPDATE person_profiles
+      SET ${sets.join(", ")}
+      WHERE user_id = $${index}
+      RETURNING *
+    `,
+    values,
+  );
+
+  return rows[0];
+}
+
+type UpdateCompanyProfileParams = {
+  userId: string;
+  legalName?: string;
+  phone?: string;
+};
+
+export async function updateCompanyProfile(
+  client: PoolClient,
+  { userId, legalName, phone }: UpdateCompanyProfileParams,
+) {
+  const sets: string[] = [];
+  const values: unknown[] = [];
+  let index = 1;
+
+  if (legalName !== undefined) {
+    sets.push(`legal_name = $${index}`);
+    values.push(legalName);
+    index += 1;
+  }
+
+  if (phone !== undefined) {
+    sets.push(`phone = $${index}`);
+    values.push(phone);
+    index += 1;
+  }
+
+  if (sets.length === 0) {
+    return null;
+  }
+
+  values.push(userId);
+
+  const { rows } = await client.query(
+    `
+      UPDATE company_profiles
+      SET ${sets.join(", ")}
+      WHERE user_id = $${index}
+      RETURNING *
+    `,
+    values,
+  );
+
+  return rows[0];
+}
+
 export async function upsertCompanyProfile(
   client: PoolClient,
   {
