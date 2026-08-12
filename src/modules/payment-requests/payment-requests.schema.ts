@@ -12,23 +12,44 @@ const amountSchema = z
     "El monto debe ser mayor que cero",
   );
 
+const aliasSchema = z
+  .string()
+  .trim()
+  .min(6, "El alias debe tener al menos 6 caracteres")
+  .max(30, "El alias no puede superar los 30 caracteres")
+  .regex(/^[a-z0-9.-]+$/, "El alias tiene un formato inválido");
+
+const accountNumberSchema = z
+  .string()
+  .trim()
+  .regex(/^GLB-[0-9A-F]{8}$/, "El número de cuenta tiene un formato inválido");
+
 export const createPaymentRequestSchema = z
   .object({
     payerEmail: z
-  .string()
-  .trim()
-  .pipe(
-    z
+      .string()
+      .trim()
       .email("El correo del pagador no es válido")
-      .max(254),
-  )
-  .transform((value) => value.toLowerCase()),
-
+      .max(254)
+      .transform((value) => value.toLowerCase())
+      .optional(),
+    payerAlias: aliasSchema.optional(),
+    payerAccountNumber: accountNumberSchema.optional(),
     currency: z.enum(["ARS", "USD", "EUR"]),
-
     amount: amountSchema,
   })
-  .strict();
+  .strict()
+  .refine(
+    (data) =>
+      data.payerEmail !== undefined ||
+      data.payerAlias !== undefined ||
+      data.payerAccountNumber !== undefined,
+    {
+      message: "Se debe proporcionar al menos uno de los siguientes campos: payerEmail, payerAlias o payerAccountNumber",
+      path: ["payerEmail"],
+    }
+  );
+
 
 export const paymentRequestIdSchema = z.uuid(
   "El identificador de la solicitud no es válido",

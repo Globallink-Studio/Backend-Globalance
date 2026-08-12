@@ -48,6 +48,47 @@ export class PaymentRequestsRepository {
     return result.rows[0] ?? null;
   }
 
+    async findUserByAlias(
+    client: PoolClient,
+    alias: string,
+  ): Promise<PaymentRequestUser | null> {
+    const result = await client.query<PaymentRequestUser>(
+      `
+        SELECT
+          u.id,
+          u.email,
+          u.status
+        FROM users u
+        JOIN wallets w ON w.user_id = u.id
+        WHERE w.alias = $1
+      `,
+      [alias],
+    );
+
+    return result.rows[0] ?? null;
+  }
+
+  async findUserByAccountNumber(
+    client: PoolClient,
+    accountNumber: string,
+  ): Promise<PaymentRequestUser | null> {
+    const result = await client.query<PaymentRequestUser>(
+      `
+        SELECT
+          u.id,
+          u.email,
+          u.status
+        FROM users u
+        JOIN wallets w ON w.user_id = u.id
+        WHERE w.account_number = $1
+      `,
+      [accountNumber],
+    );
+
+    return result.rows[0] ?? null;
+  }
+
+
   async create(
     client: PoolClient,
     requesterUserId: string,

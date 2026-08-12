@@ -68,19 +68,33 @@ export class PaymentRequestsService {
         );
       }
 
-      const payer =
-        await this.paymentRequestsRepository.findUserByEmail(
+            let payer = null;
+
+      if (input.payerEmail) {
+        payer = await this.paymentRequestsRepository.findUserByEmail(
           client,
           input.payerEmail,
         );
+      } else if (input.payerAlias) {
+        payer = await this.paymentRequestsRepository.findUserByAlias(
+          client,
+          input.payerAlias,
+        );
+      } else if (input.payerAccountNumber) {
+        payer = await this.paymentRequestsRepository.findUserByAccountNumber(
+          client,
+          input.payerAccountNumber,
+        );
+      }
 
       if (!payer) {
         throw new PaymentRequestsServiceError(
           404,
           "PAYER_NOT_FOUND",
-          "El correo no corresponde a un usuario registrado",
+          "El pagador especificado no corresponde a un usuario registrado",
         );
       }
+
 
       if (payer.status !== "active") {
         throw new PaymentRequestsServiceError(
