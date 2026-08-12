@@ -2,13 +2,17 @@ import { Router } from "express";
 import { verifyFirebaseToken } from "../../middlewares/firebase-auth.middleware";
 import { validateBody } from "../../middlewares/validate.middleware";
 import {
+  completeProfileHandler,
+  editProfileHandler,
   readProfile,
-  updateProfile,
+  deleteProfile,
 } from "./users.controller";
-import { completeProfileSchema } from "./users.schema";
+import {
+  completeProfileSchema,
+  editProfileSchema,
+} from "./users.schema";
 
 export const usersRouter = Router();
-
 
 usersRouter.get(
   "/profile",
@@ -16,10 +20,22 @@ usersRouter.get(
   readProfile,
 );
 
+usersRouter.post(
+  "/profile",
+  verifyFirebaseToken,
+  validateBody(completeProfileSchema),
+  completeProfileHandler,
+);
 
 usersRouter.patch(
   "/profile",
   verifyFirebaseToken,
-  validateBody(completeProfileSchema),
-  updateProfile,
+  validateBody(editProfileSchema),
+  editProfileHandler,
+);
+
+usersRouter.delete(
+  "/profile",
+  verifyFirebaseToken,
+  deleteProfile,
 );

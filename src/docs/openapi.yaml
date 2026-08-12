@@ -236,14 +236,17 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
-    patch:
+    post:
       tags:
         - Users
-      summary: Crear o editar el perfil del usuario
+      summary: Completar el perfil del usuario (onboarding)
       description: >
-        Crea el perfil personal o empresarial si no existe y lo actualiza si ya
-        existe (upsert). Incluye la moneda principal (displayCurrency), que define
-        cómo se presentan las operaciones de compra y venta.
+        Crea el perfil personal o empresarial por primera vez. Solo está permitido
+        mientras el usuario no haya completado el perfil (user_type en null); si ya
+        lo completó, responde 409 PROFILE_ALREADY_COMPLETED. El documento y el tipo
+        de cuenta quedan fijos a partir de este momento y no se pueden modificar.
+        Incluye la moneda principal (displayCurrency), que define cómo se presentan
+        las operaciones de compra y venta.
       security:
         - bearerAuth: []
       requestBody:
@@ -256,7 +259,7 @@ paths:
                 - $ref: "#/components/schemas/CompanyProfileInput"
       responses:
         "200":
-          description: Perfil creado o actualizado correctamente
+          description: Perfil completado correctamente
           content:
             application/json:
               schema:
@@ -288,8 +291,73 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
         "409":
           description: >
-            Conflicto con el estado del recurso: alias o documento duplicado,
-            o intento de modificar el tipo de usuario (USER_TYPE_NOT_EDITABLE).
+            El perfil ya fue completado (PROFILE_ALREADY_COMPLETED) o el alias o
+            documento enviado ya está en uso (DUPLICATE_RESOURCE).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Error interno del servidor
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+    patch:
+      tags:
+        - Users
+      summary: Editar el perfil del usuario
+      description: >
+        Actualiza de forma parcial el perfil ya completado: solo se modifican los
+        campos enviados y se conserva el resto. Documento, tipo de cuenta y número
+        de cuenta no son editables y no se aceptan en este endpoint. Se debe enviar
+        al menos un campo. Si el perfil no fue completado aún, responde 409
+        PROFILE_NOT_COMPLETED.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProfileEditInput"
+      responses:
+        "200":
+          description: Perfil actualizado correctamente
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      message:
+                        type: string
+                        example: Perfil actualizado correctamente.
+        "400":
+          description: Datos del perfil inválidos o no se envió ningún campo
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Token ausente, inválido o vencido
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Usuario no encontrado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: >
+            El perfil no fue completado (PROFILE_NOT_COMPLETED) o el alias enviado
+            ya está en uso (DUPLICATE_RESOURCE).
           content:
             application/json:
               schema:
@@ -1618,6 +1686,16 @@ components:
         legal_name:
           type: string
           nullable: true
+        document:
+          type: string
+          nullable: true
+          description: Documento (inmutable). Solo se define en el onboarding.
+        phone:
+          type: string
+          nullable: true
+        alias:
+          type: string
+          nullable: true
 
     PersonProfileInput:
       type: object
@@ -1721,6 +1799,53 @@ components:
           type: string
           example: America/Argentina/Buenos_Aires
           description: Zona horaria del usuario (IANA). Determina los límites diarios y el historial. Si no se envía, se conserva el valor actual.
+      additionalProperties: false
+
+    ProfileEditInput:
+      type: object
+      minProperties: 1
+      description: >
+        Campos editables del perfil. Documento, tipo de cuenta y número de cuenta
+        no se pueden modificar. Se debe enviar al menos un campo.
+      properties:
+        firstName:
+          type: string
+          minLength: 2
+          maxLength: 100
+          example: Jazmín
+        lastName:
+          type: string
+          minLength: 2
+          maxLength: 100
+          example: Morínigo
+        legalName:
+          type: string
+          minLength: 2
+          maxLength: 150
+          example: Globalance S.A.
+        phone:
+          type: string
+          minLength: 7
+          maxLength: 30
+          example: "+5491123456789"
+        alias:
+          type: string
+          minLength: 6
+          maxLength: 30
+          pattern: "^[a-z0-9.-]+$"
+          example: jazmin.globalance
+        displayCurrency:
+          type: string
+          enum:
+            - ARS
+            - USD
+            - EUR
+          example: ARS
+          description: Moneda principal de la wallet. Determina cómo se clasifican las operaciones de compra y venta.
+        timezone:
+          type: string
+          example: America/Argentina/Buenos_Aires
+          description: Zona horaria del usuario (IANA). Si no se envía, se conserva el valor actual.
       additionalProperties: false
 
     Balance:
