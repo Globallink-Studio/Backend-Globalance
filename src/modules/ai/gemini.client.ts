@@ -27,7 +27,7 @@ export interface GeminiClientConfig {
   maxOutputTokens: number;
 }
 
-export const GEMINI_DEFAULT_TEMPERATURE = 0.2;
+export const GEMINI_DEFAULT_TEMPERATURE = 0.4;
 export const GEMINI_DEFAULT_MAX_OUTPUT_TOKENS = 500;
 
 export class GeminiClient {

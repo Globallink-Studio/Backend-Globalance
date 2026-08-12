@@ -54,7 +54,7 @@ describe("GeminiClient", () => {
         body: JSON.stringify({
           contents: [{ parts: [{ text: "¿Cuánto tengo?" }] }],
           generationConfig: {
-            temperature: 0.2,
+            temperature: 0.4,
             maxOutputTokens: 500,
           },
         }),
