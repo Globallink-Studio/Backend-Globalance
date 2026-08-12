@@ -4,6 +4,7 @@ import { validateBody } from "../../middlewares/validate.middleware";
 import {
   readProfile,
   updateProfile,
+  deleteProfile,
 } from "./users.controller";
 import { completeProfileSchema } from "./users.schema";
 
@@ -22,4 +23,10 @@ usersRouter.patch(
   verifyFirebaseToken,
   validateBody(completeProfileSchema),
   updateProfile,
+);
+
+usersRouter.delete(
+  "/profile",
+  verifyFirebaseToken,
+  deleteProfile,
 );

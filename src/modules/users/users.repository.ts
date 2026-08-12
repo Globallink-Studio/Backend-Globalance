@@ -222,3 +222,38 @@ export async function findUserWithProfileByFirebaseUid(
 
   return rows[0] ?? null;
 }
+
+export async function deletePersonProfile(client: PoolClient, userId: string): Promise<void> {
+  await client.query(`DELETE FROM person_profiles WHERE user_id = $1`, [userId]);
+}
+
+export async function deleteCompanyProfile(client: PoolClient, userId: string): Promise<void> {
+  await client.query(`DELETE FROM company_profiles WHERE user_id = $1`, [userId]);
+}
+
+export async function softDeleteUser(
+  client: PoolClient,
+  { userId, scrambledEmail }: { userId: string; scrambledEmail: string },
+): Promise<void> {
+  await client.query(
+    `
+      UPDATE users
+      SET status = 'inactive', 
+          email = $1, 
+          firebase_uid = $2
+      WHERE id = $3
+    `,
+    [scrambledEmail, `deleted_${userId}`, userId],
+  );
+}
+
+export async function deactivateWallet(client: PoolClient, userId: string): Promise<void> {
+  await client.query(
+    `
+      UPDATE wallets
+      SET status = 'inactive'
+      WHERE user_id = $1
+    `,
+    [userId],
+  );
+}

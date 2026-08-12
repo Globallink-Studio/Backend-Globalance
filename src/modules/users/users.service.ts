@@ -1,6 +1,9 @@
 import { pool } from "../../db/pool";
 import { AppError } from "../../errors/app-error";
 import { findUserByFirebaseUid } from "../auth/auth.repository";
+import { auth } from "../../config/firebase";
+import { BalanceRepository } from "../balances/balances.repository";
+import { WalletRepository } from "../wallets/wallet.repository";
 import {
   findUserWithProfileByFirebaseUid,
   upsertCompanyProfile,
@@ -10,6 +13,10 @@ import {
   updateUserType,
   updateWalletAlias,
   UserType,
+  deactivateWallet,
+  deleteCompanyProfile,
+  deletePersonProfile,
+  softDeleteUser,
 } from "./users.repository";
 
 type CompletePersonProfile = {
@@ -137,6 +144,65 @@ export async function getProfile(firebaseUid: string) {
     }
 
     return profile;
+  } finally {
+    client.release();
+  }
+}
+
+const walletRepository = new WalletRepository();
+const balanceRepository = new BalanceRepository();
+
+export async function deleteUserAccount(firebaseUid: string) {
+  const client = await pool.connect();
+
+  try {
+    const user = await findUserByFirebaseUid(client, firebaseUid);
+    if (!user) {
+      throw new AppError(404, "USER_NOT_FOUND", "Usuario no encontrado.");
+    }
+
+    if (user.status !== "active") {
+      throw new AppError(403, "USER_NOT_ACTIVE", "El usuario no está activo.");
+    }
+
+    const wallet = await walletRepository.findByUserId(user.id);
+    if (wallet) {
+      const balances = await balanceRepository.findByWalletId(wallet.id);
+      const hasFunds = balances.some((b) => Number(b.amount) > 0);
+      if (hasFunds) {
+        throw new AppError(
+          400,
+          "ACCOUNT_HAS_FUNDS",
+          "No podés eliminar tu cuenta si aún tenés saldo en tu billetera.",
+        );
+      }
+    }
+
+    await client.query("BEGIN");
+
+    if (wallet) {
+      await deactivateWallet(client, user.id);
+    }
+
+    if (user.user_type === "person") {
+      await deletePersonProfile(client, user.id);
+    } else if (user.user_type === "company") {
+      await deleteCompanyProfile(client, user.id);
+    }
+
+    const scrambledEmail = `deleted_${user.id}_${user.email}`;
+    await softDeleteUser(client, { userId: user.id, scrambledEmail });
+
+    await client.query("COMMIT");
+
+    await auth.deleteUser(firebaseUid);
+
+    return {
+      message: "Cuenta eliminada correctamente.",
+    };
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
   } finally {
     client.release();
   }
