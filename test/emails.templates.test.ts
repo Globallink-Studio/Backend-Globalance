@@ -14,7 +14,7 @@ describe("createIncomeReceipt", () => {
     });
 
     expect(content.subject).toBe("Carga de saldo en Globalance");
-    expect(content.htmlBody).toContain("Importe acreditado");
+    expect(content.htmlBody).toContain("IMPORTE ACREDITADO");
     expect(content.htmlBody).toContain("5000 ARS");
     expect(content.htmlBody).toContain("1550000 ARS");
     expect(content.htmlBody).toContain("tx-1");
