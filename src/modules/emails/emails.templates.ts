@@ -1,3 +1,6 @@
+import path from "path";
+import fs from "fs";
+
 export interface EmailContent {
   subject: string;
   htmlBody: string;
@@ -52,27 +55,49 @@ function escapeHtml(value: string): string {
     .replaceAll("'", "&#039;");
 }
 
+const templateCache: Record<string, string> = {};
+
+function loadAndRenderTemplate(
+  templateName: string,
+  variables: Record<string, string>,
+): string {
+  let template = templateCache[templateName];
+  if (!template) {
+    const filePath = path.join(__dirname, "templates", `${templateName}.html`);
+    template = fs.readFileSync(filePath, "utf-8");
+    templateCache[templateName] = template;
+  }
+
+  let rendered = template;
+  for (const [key, value] of Object.entries(variables)) {
+    const escapedValue = escapeHtml(value);
+    rendered = rendered.replaceAll(`{{${key}}}`, escapedValue);
+  }
+
+  const missingPlaceholderRegex = /\{\{[^{}]+\}\}/;
+  const match = rendered.match(missingPlaceholderRegex);
+  if (match) {
+    throw new Error(
+      `El marcador ${match[0]} en la plantilla '${templateName}' no fue reemplazado.`,
+    );
+  }
+
+  return rendered;
+}
+
 export function createPaymentRequestInvitation(
   input: PaymentRequestInvitationInput,
 ): EmailContent {
-  const requesterName = escapeHtml(input.requesterName);
-  const amount = escapeHtml(input.amount);
-  const currency = escapeHtml(input.currency);
-  const paymentUrl = escapeHtml(input.paymentUrl);
+  const htmlBody = loadAndRenderTemplate("solicitud-cobro", {
+    requesterName: input.requesterName,
+    amount: input.amount,
+    currency: input.currency,
+    paymentUrl: input.paymentUrl,
+  });
 
   return {
     subject: "Tenés una solicitud de cobro en Globalance",
-    htmlBody: `
-      <h1>Solicitud de cobro</h1>
-      <p>${requesterName} te envió una solicitud de cobro.</p>
-      <p><strong>Importe:</strong> ${amount} ${currency}</p>
-      <p>
-        <a href="${paymentUrl}">
-          Ver solicitud en Globalance
-        </a>
-      </p>
-      <p>La solicitud vence dentro de 7 días.</p>
-    `,
+    htmlBody,
     textBody:
       `${input.requesterName} te envió una solicitud de cobro ` +
       `por ${input.amount} ${input.currency}. ` +
@@ -89,19 +114,17 @@ export function createPaymentReceipt(
       ? "Realizaste un pago"
       : "Recibiste un pago";
 
-  const counterpartName = escapeHtml(input.counterpartName);
-  const amount = escapeHtml(input.amount);
-  const currency = escapeHtml(input.currency);
-  const transactionId = escapeHtml(input.transactionId);
+  const htmlBody = loadAndRenderTemplate("comprobante-pago", {
+    action,
+    counterpartName: input.counterpartName,
+    amount: input.amount,
+    currency: input.currency,
+    transactionId: input.transactionId,
+  });
 
   return {
     subject: `${action} en Globalance`,
-    htmlBody: `
-      <h1>${action}</h1>
-      <p><strong>Contraparte:</strong> ${counterpartName}</p>
-      <p><strong>Importe:</strong> ${amount} ${currency}</p>
-      <p><strong>Transacción:</strong> ${transactionId}</p>
-    `,
+    htmlBody,
     textBody:
       `${action}. Contraparte: ${input.counterpartName}. ` +
       `Importe: ${input.amount} ${input.currency}. ` +
@@ -117,19 +140,17 @@ export function createTransferReceipt(
       ? "Enviaste una transferencia"
       : "Recibiste una transferencia";
 
-  const counterpartName = escapeHtml(input.counterpartName);
-  const amount = escapeHtml(input.amount);
-  const currency = escapeHtml(input.currency);
-  const transactionId = escapeHtml(input.transactionId);
+  const htmlBody = loadAndRenderTemplate("comprobante-transferencia", {
+    action,
+    counterpartName: input.counterpartName,
+    amount: input.amount,
+    currency: input.currency,
+    transactionId: input.transactionId,
+  });
 
   return {
     subject: `${action} en Globalance`,
-    htmlBody: `
-      <h1>${action}</h1>
-      <p><strong>Contraparte:</strong> ${counterpartName}</p>
-      <p><strong>Importe:</strong> ${amount} ${currency}</p>
-      <p><strong>Transacción:</strong> ${transactionId}</p>
-    `,
+    htmlBody,
     textBody:
       `${action}. Contraparte: ${input.counterpartName}. ` +
       `Importe: ${input.amount} ${input.currency}. ` +
@@ -140,19 +161,16 @@ export function createTransferReceipt(
 export function createIncomeReceipt(
   input: IncomeReceiptInput,
 ): EmailContent {
-  const amount = escapeHtml(input.amount);
-  const currency = escapeHtml(input.currency);
-  const transactionId = escapeHtml(input.transactionId);
-  const newBalance = escapeHtml(input.newBalance);
+  const htmlBody = loadAndRenderTemplate("carga-saldo", {
+    amount: input.amount,
+    currency: input.currency,
+    newBalance: input.newBalance,
+    transactionId: input.transactionId,
+  });
 
   return {
     subject: "Carga de saldo en Globalance",
-    htmlBody: `
-      <h1>Carga de saldo</h1>
-      <p><strong>Importe acreditado:</strong> ${amount} ${currency}</p>
-      <p><strong>Saldo actual:</strong> ${newBalance} ${currency}</p>
-      <p><strong>Transacción:</strong> ${transactionId}</p>
-    `,
+    htmlBody,
     textBody:
       `Carga de saldo. Importe acreditado: ${input.amount} ` +
       `${input.currency}. Saldo actual: ${input.newBalance} ` +
@@ -163,22 +181,18 @@ export function createIncomeReceipt(
 export function createExchangeReceipt(
   input: ExchangeReceiptInput,
 ): EmailContent {
-  const sourceAmount = escapeHtml(input.sourceAmount);
-  const sourceCurrency = escapeHtml(input.sourceCurrency);
-  const targetAmount = escapeHtml(input.targetAmount);
-  const targetCurrency = escapeHtml(input.targetCurrency);
-  const rate = escapeHtml(input.rate);
-  const transactionId = escapeHtml(input.transactionId);
+  const htmlBody = loadAndRenderTemplate("cambio-moneda", {
+    sourceAmount: input.sourceAmount,
+    sourceCurrency: input.sourceCurrency,
+    targetAmount: input.targetAmount,
+    targetCurrency: input.targetCurrency,
+    rate: input.rate,
+    transactionId: input.transactionId,
+  });
 
   return {
-    subject: `Cambio de ${sourceCurrency} a ${targetCurrency} en Globalance`,
-    htmlBody: `
-      <h1>Cambio de moneda</h1>
-      <p><strong>Enviaste:</strong> ${sourceAmount} ${sourceCurrency}</p>
-      <p><strong>Recibiste:</strong> ${targetAmount} ${targetCurrency}</p>
-      <p><strong>Tasa aplicada:</strong> 1 ${sourceCurrency} = ${rate} ${targetCurrency}</p>
-      <p><strong>Transacción:</strong> ${transactionId}</p>
-    `,
+    subject: `Cambio de ${input.sourceCurrency} a ${input.targetCurrency} en Globalance`,
+    htmlBody,
     textBody:
       `Cambio de ${input.sourceCurrency} a ${input.targetCurrency}. ` +
       `Enviaste ${input.sourceAmount} ${input.sourceCurrency}. ` +

@@ -93,7 +93,9 @@ export async function createWallet(
   client: PoolClient,
   { userId, firebaseUid }: CreateWalletParams,
 ) {
-  const alias = `glb-${firebaseUid.substring(0, 8)}`;
+  const alias = `glb-${firebaseUid
+    .substring(0, 8)
+    .toLowerCase()}`;
 
   const accountNumber = `GLB-${crypto.randomUUID().substring(0, 8).toUpperCase()}`;
 
