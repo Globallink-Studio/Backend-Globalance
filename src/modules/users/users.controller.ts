@@ -5,6 +5,7 @@ import {
   editProfile,
   EditProfileParams,
   getProfile,
+  deleteUserAccount,
 } from "./users.service";
 
 export async function completeProfileHandler(
@@ -59,6 +60,22 @@ export async function readProfile(
 
     return res.status(200).json({
       data: profile,
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function deleteProfile(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) {
+  try {
+    const result = await deleteUserAccount(req.user!.uid);
+
+    return res.status(200).json({
+      data: result,
     });
   } catch (error) {
     next(error);

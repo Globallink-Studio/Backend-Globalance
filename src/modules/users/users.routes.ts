@@ -5,6 +5,7 @@ import {
   completeProfileHandler,
   editProfileHandler,
   readProfile,
+  deleteProfile,
 } from "./users.controller";
 import {
   completeProfileSchema,
@@ -31,4 +32,10 @@ usersRouter.patch(
   verifyFirebaseToken,
   validateBody(editProfileSchema),
   editProfileHandler,
+);
+
+usersRouter.delete(
+  "/profile",
+  verifyFirebaseToken,
+  deleteProfile,
 );
