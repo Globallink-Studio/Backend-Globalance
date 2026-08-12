@@ -10,6 +10,24 @@ const aliasSchema = z
     "El alias solo puede contener minúsculas, números, puntos y guiones",
   );
 
+const firstNameSchema = z
+  .string()
+  .trim()
+  .min(2, "El nombre debe tener al menos 2 caracteres")
+  .max(100, "El nombre no puede superar los 100 caracteres");
+
+const lastNameSchema = z
+  .string()
+  .trim()
+  .min(2, "El apellido debe tener al menos 2 caracteres")
+  .max(100, "El apellido no puede superar los 100 caracteres");
+
+const legalNameSchema = z
+  .string()
+  .trim()
+  .min(2, "La razón social debe tener al menos 2 caracteres")
+  .max(150, "La razón social no puede superar los 150 caracteres");
+
 const documentSchema = z
   .string()
   .trim()
@@ -48,16 +66,8 @@ const timezoneSchema = z
 const personProfileSchema = z
   .object({
     userType: z.literal("person"),
-    firstName: z
-      .string()
-      .trim()
-      .min(2, "El nombre debe tener al menos 2 caracteres")
-      .max(100, "El nombre no puede superar los 100 caracteres"),
-    lastName: z
-      .string()
-      .trim()
-      .min(2, "El apellido debe tener al menos 2 caracteres")
-      .max(100, "El apellido no puede superar los 100 caracteres"),
+    firstName: firstNameSchema,
+    lastName: lastNameSchema,
     document: documentSchema,
     phone: phoneSchema,
     alias: aliasSchema,
@@ -69,11 +79,7 @@ const personProfileSchema = z
 const companyProfileSchema = z
   .object({
     userType: z.literal("company"),
-    legalName: z
-      .string()
-      .trim()
-      .min(2, "La razón social debe tener al menos 2 caracteres")
-      .max(150, "La razón social no puede superar los 150 caracteres"),
+    legalName: legalNameSchema,
     document: documentSchema,
     phone: phoneSchema,
     alias: aliasSchema,
@@ -90,5 +96,28 @@ export const completeProfileSchema = z.discriminatedUnion(
   ],
 );
 
+const editProfileSchema = z
+  .object({
+    firstName: firstNameSchema.optional(),
+    lastName: lastNameSchema.optional(),
+    legalName: legalNameSchema.optional(),
+    phone: phoneSchema.optional(),
+    alias: aliasSchema.optional(),
+    displayCurrency: displayCurrencySchema.optional(),
+    timezone: timezoneSchema.optional(),
+  })
+  .strict()
+  .refine(
+    (changes) => Object.keys(changes).length > 0,
+    {
+      message:
+        "Debes enviar al menos un campo para actualizar el perfil",
+    },
+  );
+
+export { editProfileSchema };
+
 export type CompleteProfileInput =
   z.infer<typeof completeProfileSchema>;
+
+export type EditProfileInput = z.infer<typeof editProfileSchema>;
