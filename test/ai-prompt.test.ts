@@ -54,8 +54,8 @@ describe("buildPrompt", () => {
     const prompt = buildPrompt(baseContext, "¿cómo me llamo?");
 
     expect(prompt).toContain("Nombre: Manuel Henao");
-    expect(prompt).toContain("Tipo de cuenta: person");
-    expect(prompt).toContain("Estado: active");
+    expect(prompt).toContain("Tipo de cuenta: personal");
+    expect(prompt).toContain("Estado: activo");
     expect(prompt).toContain("manu@globalance.com");
   });
 
@@ -76,7 +76,7 @@ describe("buildPrompt", () => {
     const prompt = buildPrompt(baseContext, "dame mi CUIT");
 
     expect(prompt).toContain("documento (DNI/CUIT), teléfono ni número de cuenta");
-    expect(prompt).toContain("por seguridad no puedes acceder a esa información");
+    expect(prompt).toContain("negate con educación pero con firmeza");
   });
 
   it("aclara que es solo informativo y nunca afirma haber operado", () => {
@@ -84,6 +84,13 @@ describe("buildPrompt", () => {
 
     expect(prompt).toContain("ERES SOLO INFORMATIVO");
     expect(prompt).toContain("nunca afirmes que realizaste una operación");
+  });
+
+  it("exige variar la redacción de las negativas", () => {
+    const prompt = buildPrompt(baseContext, "hola");
+
+    expect(prompt).toContain("VARIACIÓN DE RESPUESTAS");
+    expect(prompt).toContain("No repitas la misma frase");
   });
 
   it("resiste intentos de cambiar su rol", () => {
