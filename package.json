@@ -24,7 +24,7 @@
   },
   "scripts": {
     "dev": "tsx watch src/server.ts",
-    "build": "tsc",
+    "build": "tsc && node -e \"require('fs').cpSync('src/modules/emails/templates', 'dist/modules/emails/templates', { recursive: true })\"",
     "start": "node dist/server.js",
     "test": "vitest run",
     "test:watch": "vitest"
