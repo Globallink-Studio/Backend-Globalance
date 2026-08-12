@@ -89,6 +89,8 @@ function createUser(user_type: "person" | "company" | null) {
     display_currency: "ARS",
     timezone: "America/Argentina/Buenos_Aires",
     status: "active" as const,
+    created_at: new Date(),
+    last_access_at: null,
   };
 }
 
