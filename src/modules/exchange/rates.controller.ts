@@ -116,8 +116,7 @@ export class RatesController {
 
       res.status(200).json({
         history,
-      });
-    } catch (error) {
+      });    } catch (error) {
       if (error instanceof RateProviderError) {
         res.status(502).json({
           error: {

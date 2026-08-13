@@ -825,7 +825,8 @@ paths:
         Devuelve la evolución diaria de la tasa de cambio entre dos monedas
         durante los últimos `days` días. Si faltan fechas en el historial
         (por ejemplo la primera consulta), se completan automáticamente con
-        el histórico de Frankfurter. Devuelve solo fechas hábiles.
+        el histórico de Frankfurter. Devuelve solo fechas hábiles. Cada punto
+        expresa cuántas unidades de `target` cuestan 1 de `source`.
       security:
         - bearerAuth: []
       parameters:
@@ -838,7 +839,7 @@ paths:
               - ARS
               - USD
               - EUR
-          description: Moneda de origen
+          description: Moneda de origen (1 unidad equivale a buy_price de target)
         - in: query
           name: target
           required: true
@@ -2215,20 +2216,6 @@ components:
     RatesHistory:
       type: object
       properties:
-        source:
-          type: string
-          enum:
-            - ARS
-            - USD
-            - EUR
-        target:
-          type: string
-          enum:
-            - ARS
-            - USD
-            - EUR
-        days:
-          type: integer
         history:
           type: array
           items:
@@ -2237,18 +2224,21 @@ components:
     QuoteHistoryPoint:
       type: object
       properties:
+        currency_code:
+          type: string
+          enum:
+            - ARS
+            - USD
+            - EUR
+          example: USD
         date:
           type: string
           format: date
-          example: "2026-08-07"
-        rate:
-          type: string
-          example: "1490.5000000000"
-        provider:
-          type: string
-          enum:
-            - frankfurter
-            - exchange_rate_api
+          example: "2026-08-01"
+        buy_price:
+          type: number
+          format: double
+          example: 1500.0
 
     WalletSummary:
       type: object
