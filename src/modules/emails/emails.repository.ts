@@ -75,7 +75,7 @@ export class EmailsRepository {
         SELECT
           $1::uuid,
           $2::uuid,
-          $3,
+          $3::varchar,
           $4,
           COALESCE(MAX(attempt_number), 0) + 1,
           'pending',
@@ -85,7 +85,7 @@ export class EmailsRepository {
           $7
         FROM email_deliveries
         WHERE recipient_email = $4
-          AND transaction_event = $3
+          AND transaction_event = $3::varchar
           AND (
             ($1::uuid IS NOT NULL AND transaction_id = $1::uuid)
             OR
