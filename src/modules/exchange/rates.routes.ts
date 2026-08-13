@@ -11,4 +11,10 @@ ratesRouter.get(
   ratesController.getRates,
 );
 
+ratesRouter.get(
+  "/rates/history",
+  verifyFirebaseToken,
+  ratesController.getRatesHistory,
+);
+
 export { ratesRouter };

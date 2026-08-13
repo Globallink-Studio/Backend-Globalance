@@ -9,6 +9,12 @@ export interface QuoteHistoryRow {
   provider: string;
 }
 
+export interface QuoteHistoryRecord {
+  quote_date: string;
+  rate: string;
+  provider: string;
+}
+
 export async function upsertDailyQuote(
   rate: ExchangeRate,
   quoteDate: Date,
@@ -68,4 +74,27 @@ export async function findQuoteOnDate(
     provider: row.provider as RateProviderName,
     fetchedAt: date,
   };
+}
+
+export async function findQuoteHistory(
+  source: string,
+  target: string,
+  days: number,
+): Promise<QuoteHistoryRecord[]> {
+    const result = await pool.query<QuoteHistoryRecord>(
+      `
+      SELECT
+        quote_date::text AS quote_date,
+        rate::text AS rate,
+        provider
+      FROM exchange_quote_history
+      WHERE source_currency = $1
+        AND target_currency = $2
+        AND quote_date >= (CURRENT_DATE - $3::integer + 1)
+      ORDER BY quote_date ASC
+    `,
+      [source, target, days],
+    );
+
+  return result.rows;
 }

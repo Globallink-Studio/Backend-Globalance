@@ -12,6 +12,14 @@ export interface ExchangeRate {
   fetchedAt: Date;
 }
 
+export interface HistoricalRate {
+  date: string;
+  source: string;
+  target: string;
+  rate: number;
+  provider: RateProviderName;
+}
+
 export class RateProviderError extends Error {
   constructor(message: string) {
     super(message);
@@ -62,6 +70,80 @@ export class RateProvider {
     } catch {
       return null;
     }
+  }
+
+  async getHistoricalRates(
+    source: string,
+    target: string,
+    fromDate: Date,
+    toDate: Date,
+  ): Promise<HistoricalRate[]> {
+    const from = fromDate.toISOString().slice(0, 10);
+    const to = toDate.toISOString().slice(0, 10);
+
+    const url =
+      `https://api.frankfurter.dev/v2/rates?base=${source}&quotes=${target}&from=${from}&to=${to}`;
+
+    const response = await fetch(url, {
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    });
+
+    if (!response.ok) {
+      throw new RateProviderError(
+        `Frankfurter respondió con status ${response.status} al obtener el histórico`,
+      );
+    }
+
+    const data = (await response.json()) as Array<{
+      date?: string;
+      rate?: number;
+    }>;
+
+    if (!Array.isArray(data)) {
+      throw new RateProviderError(
+        "Frankfurter no devolvió un histórico válido",
+      );
+    }
+
+    const historicalRates: HistoricalRate[] = [];
+
+    for (const entry of data) {
+      if (
+        typeof entry.date !== "string" ||
+        typeof entry.rate !== "number" ||
+        !Number.isFinite(entry.rate) ||
+        entry.rate <= 0
+      ) {
+        continue;
+      }
+
+      historicalRates.push({
+        date: entry.date,
+        source,
+        target,
+        rate: entry.rate,
+        provider: "frankfurter",
+      });
+    }
+
+    for (const historical of historicalRates) {
+      try {
+        await upsertDailyQuote(
+          {
+            source: historical.source,
+            target: historical.target,
+            rate: historical.rate,
+            provider: historical.provider,
+            fetchedAt: new Date(historical.date),
+          },
+          new Date(historical.date),
+        );
+      } catch {
+        // El historial es un refuerzo: si falla, se sigue con las demás fechas.
+      }
+    }
+
+    return historicalRates;
   }
 
   private async storeCache(rate: ExchangeRate): Promise<void> {
