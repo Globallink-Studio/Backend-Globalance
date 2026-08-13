@@ -93,23 +93,18 @@ describe("RatesService.getRatesHistory", () => {
 
     const result = await service.getRatesHistory("USD", "ARS", 7);
 
-    expect(result).toEqual({
-      source: "USD",
-      target: "ARS",
-      days: 7,
-      history: [
-        {
-          date: "2026-08-10",
-          rate: "1498.1200000000",
-          provider: "frankfurter",
-        },
-        {
-          date: "2026-08-11",
-          rate: "1500.0000000000",
-          provider: "frankfurter",
-        },
-      ],
-    });
+    expect(result).toEqual([
+      {
+        currency_code: "ARS",
+        date: "2026-08-10",
+        buy_price: 1498.12,
+      },
+      {
+        currency_code: "ARS",
+        date: "2026-08-11",
+        buy_price: 1500,
+      },
+    ]);
   });
 
   it("usa 7 días por defecto cuando no se especifica", async () => {
@@ -117,8 +112,7 @@ describe("RatesService.getRatesHistory", () => {
 
     const result = await service.getRatesHistory("ARS", "USD");
 
-    expect(result.days).toBe(7);
-    expect(result.history).toEqual([]);
+    expect(result).toEqual([]);
   });
 
   it("completa las fechas faltantes consultando el histórico y re-lee", async () => {
@@ -146,7 +140,7 @@ describe("RatesService.getRatesHistory", () => {
     const result = await service.getRatesHistory("USD", "ARS", 7);
 
     expect(getHistoricalRatesMock).toHaveBeenCalledTimes(1);
-    expect(result.history).toEqual([]);
+    expect(result).toEqual([]);
   });
 
   it("rechaza con 400 una moneda no soportada", async () => {

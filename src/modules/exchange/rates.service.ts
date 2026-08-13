@@ -35,15 +35,10 @@ export interface RatesResult {
   expiresAt: Date;
 }
 
-export interface RatesHistoryResult {
-  source: Currency;
-  target: Currency;
-  days: number;
-  history: Array<{
-    date: string;
-    rate: string;
-    provider: string;
-  }>;
+export interface RatesHistoryPoint {
+  currency_code: Currency;
+  date: string;
+  buy_price: number;
 }
 
 export class RatesService {
@@ -98,7 +93,7 @@ export class RatesService {
     source: string,
     target: string,
     days = 7,
-  ): Promise<RatesHistoryResult> {
+  ): Promise<RatesHistoryPoint[]> {
     if (!CURRENCIES.includes(source as Currency)) {
       throw new AppError(
         400,
@@ -163,17 +158,10 @@ export class RatesService {
       days,
     );
 
-    const history = historyRows.map((row) => ({
+    return historyRows.map((row) => ({
+      currency_code: target as Currency,
       date: row.quote_date,
-      rate: row.rate,
-      provider: row.provider,
+      buy_price: Number(row.rate),
     }));
-
-    return {
-      source: source as Currency,
-      target: target as Currency,
-      days,
-      history,
-    };
   }
 }
