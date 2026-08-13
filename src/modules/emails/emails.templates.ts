@@ -55,6 +55,30 @@ function escapeHtml(value: string): string {
     .replaceAll("'", "&#039;");
 }
 
+function formatAmount(value: string): string {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) {
+    return value;
+  }
+
+  return numeric.toLocaleString("es-AR", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+}
+
+function formatRate(value: string): string {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) {
+    return value;
+  }
+
+  return numeric.toLocaleString("es-AR", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: Math.abs(numeric) < 10 ? 4 : 2,
+  });
+}
+
 const templateCache: Record<string, string> = {};
 
 function loadAndRenderTemplate(
@@ -90,7 +114,7 @@ export function createPaymentRequestInvitation(
 ): EmailContent {
   const htmlBody = loadAndRenderTemplate("solicitud-cobro", {
     requesterName: input.requesterName,
-    amount: input.amount,
+    amount: formatAmount(input.amount),
     currency: input.currency,
     paymentUrl: input.paymentUrl,
   });
@@ -100,7 +124,7 @@ export function createPaymentRequestInvitation(
     htmlBody,
     textBody:
       `${input.requesterName} te envió una solicitud de cobro ` +
-      `por ${input.amount} ${input.currency}. ` +
+      `por ${formatAmount(input.amount)} ${input.currency}. ` +
       `Podés verla en ${input.paymentUrl}. ` +
       "La solicitud vence dentro de 7 días.",
   };
@@ -117,7 +141,7 @@ export function createPaymentReceipt(
   const htmlBody = loadAndRenderTemplate("comprobante-pago", {
     action,
     counterpartName: input.counterpartName,
-    amount: input.amount,
+    amount: formatAmount(input.amount),
     currency: input.currency,
     transactionId: input.transactionId,
   });
@@ -127,7 +151,7 @@ export function createPaymentReceipt(
     htmlBody,
     textBody:
       `${action}. Contraparte: ${input.counterpartName}. ` +
-      `Importe: ${input.amount} ${input.currency}. ` +
+      `Importe: ${formatAmount(input.amount)} ${input.currency}. ` +
       `Transacción: ${input.transactionId}.`,
   };
 }
@@ -143,7 +167,7 @@ export function createTransferReceipt(
   const htmlBody = loadAndRenderTemplate("comprobante-transferencia", {
     action,
     counterpartName: input.counterpartName,
-    amount: input.amount,
+    amount: formatAmount(input.amount),
     currency: input.currency,
     transactionId: input.transactionId,
   });
@@ -153,7 +177,7 @@ export function createTransferReceipt(
     htmlBody,
     textBody:
       `${action}. Contraparte: ${input.counterpartName}. ` +
-      `Importe: ${input.amount} ${input.currency}. ` +
+      `Importe: ${formatAmount(input.amount)} ${input.currency}. ` +
       `Transacción: ${input.transactionId}.`,
   };
 }
@@ -162,9 +186,9 @@ export function createIncomeReceipt(
   input: IncomeReceiptInput,
 ): EmailContent {
   const htmlBody = loadAndRenderTemplate("carga-saldo", {
-    amount: input.amount,
+    amount: formatAmount(input.amount),
     currency: input.currency,
-    newBalance: input.newBalance,
+    newBalance: formatAmount(input.newBalance),
     transactionId: input.transactionId,
   });
 
@@ -172,8 +196,8 @@ export function createIncomeReceipt(
     subject: "Carga de saldo en Globalance",
     htmlBody,
     textBody:
-      `Carga de saldo. Importe acreditado: ${input.amount} ` +
-      `${input.currency}. Saldo actual: ${input.newBalance} ` +
+      `Carga de saldo. Importe acreditado: ${formatAmount(input.amount)} ` +
+      `${input.currency}. Saldo actual: ${formatAmount(input.newBalance)} ` +
       `${input.currency}. Transacción: ${input.transactionId}.`,
   };
 }
@@ -182,11 +206,11 @@ export function createExchangeReceipt(
   input: ExchangeReceiptInput,
 ): EmailContent {
   const htmlBody = loadAndRenderTemplate("cambio-moneda", {
-    sourceAmount: input.sourceAmount,
+    sourceAmount: formatAmount(input.sourceAmount),
     sourceCurrency: input.sourceCurrency,
-    targetAmount: input.targetAmount,
+    targetAmount: formatAmount(input.targetAmount),
     targetCurrency: input.targetCurrency,
-    rate: input.rate,
+    rate: formatRate(input.rate),
     transactionId: input.transactionId,
   });
 
@@ -195,9 +219,9 @@ export function createExchangeReceipt(
     htmlBody,
     textBody:
       `Cambio de ${input.sourceCurrency} a ${input.targetCurrency}. ` +
-      `Enviaste ${input.sourceAmount} ${input.sourceCurrency}. ` +
-      `Recibiste ${input.targetAmount} ${input.targetCurrency}. ` +
-      `Tasa aplicada: 1 ${input.sourceCurrency} = ${input.rate} ${input.targetCurrency}. ` +
+      `Enviaste ${formatAmount(input.sourceAmount)} ${input.sourceCurrency}. ` +
+      `Recibiste ${formatAmount(input.targetAmount)} ${input.targetCurrency}. ` +
+      `Tasa aplicada: 1 ${input.sourceCurrency} = ${formatRate(input.rate)} ${input.targetCurrency}. ` +
       `Transacción: ${input.transactionId}.`,
   };
 }
