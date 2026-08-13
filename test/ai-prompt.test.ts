@@ -3,6 +3,7 @@ import { buildPrompt } from "../src/modules/ai/context-builder";
 
 const baseContext = {
   user: {
+    id: "u1",
     email: "manu@globalance.com",
     display_currency: "ARS",
     type: "person",
@@ -106,5 +107,39 @@ describe("buildPrompt", () => {
     );
 
     expect(prompt).toContain("No hay historial suficiente todavía");
+  });
+
+  it("exige un tono cálido y natural", () => {
+    const prompt = buildPrompt(baseContext, "hola");
+
+    expect(prompt).toContain("PERSONALIDAD Y TONO");
+    expect(prompt).toContain("Tratá al usuario como a un amigo");
+    expect(prompt).toContain("Nunca suenes robótico");
+  });
+
+  it("maneja feedback y quejas sin plantillas de negativa", () => {
+    const prompt = buildPrompt(baseContext, "sos mal asistente");
+
+    expect(prompt).toContain("Ante comentarios, quejas o preguntas sobre vos mismo");
+    expect(prompt).toContain("No uses plantillas de negativa para eso");
+  });
+
+  it("ofrece alternativas cuando no tiene el dato en vez de cortar", () => {
+    const prompt = buildPrompt(baseContext, "hola");
+
+    expect(prompt).toContain("no cortes la conversación");
+    expect(prompt).toContain("¿querés que compare?");
+  });
+
+  it("incluye el historial reciente con los turnos etiquetados", () => {
+    const prompt = buildPrompt(baseContext, "¿subió?", [
+      { role: "user", content: "¿cuánto vale el dólar?" },
+      { role: "assistant", content: "1 USD = 1498.12 ARS" },
+    ]);
+
+    expect(prompt).toContain("HISTORIAL RECIENTE DE LA CONVERSACIÓN");
+    expect(prompt).toContain("- Usuario: ¿cuánto vale el dólar?");
+    expect(prompt).toContain("- Asistente: 1 USD = 1498.12 ARS");
+    expect(prompt).toContain("mantener el hilo");
   });
 });
