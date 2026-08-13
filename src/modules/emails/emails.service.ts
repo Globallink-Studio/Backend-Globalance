@@ -6,6 +6,10 @@ import {
 } from "./emails.repository";
 import { EmailContent } from "./emails.templates";
 import { sendEmailWithSes } from "./ses.client";
+import {
+  WALLET_BADGE_CONTENT_ID,
+  WALLET_BADGE_PNG_BASE64,
+} from "./wallet-icon";
 
 export interface TrackedEmailInput {
   context: EmailDeliveryContext;
@@ -73,6 +77,12 @@ export class EmailsService {
         subject: input.content.subject,
         htmlBody: input.content.htmlBody,
         textBody: input.content.textBody,
+        inlineImages: [
+          {
+            cid: WALLET_BADGE_CONTENT_ID,
+            pngBase64: WALLET_BADGE_PNG_BASE64,
+          },
+        ],
       });
 
       await this.emailsRepository.markAsSent(
