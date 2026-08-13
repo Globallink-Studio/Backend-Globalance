@@ -334,6 +334,7 @@ export class TransactionsRepository {
           INNER JOIN balances AS b
             ON b.id = m.balance_id
           WHERE m.transaction_id = t.id
+            AND b.wallet_id = $1
         ) AS movement_data ON TRUE
         WHERE (
           t.wallet_id = $1
