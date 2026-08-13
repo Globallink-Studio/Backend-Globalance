@@ -142,4 +142,13 @@ describe("buildPrompt", () => {
     expect(prompt).toContain("- Asistente: 1 USD = 1498.12 ARS");
     expect(prompt).toContain("mantener el hilo");
   });
+
+  it("saluda solo en la primera respuesta y usa el nombre con moderación", () => {
+    const prompt = buildPrompt(baseContext, "hola");
+
+    expect(prompt).toContain("SALUDOS");
+    expect(prompt).toContain("SOLO cuando no haya turnos previos");
+    expect(prompt).toContain("no vuelvas a saludar");
+    expect(prompt).toContain("no repitas un saludo en cada respuesta");
+  });
 });
