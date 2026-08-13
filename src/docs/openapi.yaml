@@ -816,6 +816,77 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /exchange/rates/history:
+    get:
+      tags:
+        - Exchange
+      summary: Obtener historial de tasas de un par de monedas
+      description: >
+        Devuelve la evolución diaria de la tasa de cambio entre dos monedas
+        durante los últimos `days` días. Si faltan fechas en el historial
+        (por ejemplo la primera consulta), se completan automáticamente con
+        el histórico de Frankfurter. Devuelve solo fechas hábiles.
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: source
+          required: true
+          schema:
+            type: string
+            enum:
+              - ARS
+              - USD
+              - EUR
+          description: Moneda de origen
+        - in: query
+          name: target
+          required: true
+          schema:
+            type: string
+            enum:
+              - ARS
+              - USD
+              - EUR
+          description: Moneda de destino (distinta de source)
+        - in: query
+          name: days
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 90
+            default: 7
+          description: Cantidad de días a consultar (por defecto 7)
+      responses:
+        "200":
+          description: Historial de tasas obtenido correctamente
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  history:
+                    $ref: "#/components/schemas/RatesHistory"
+        "400":
+          description: Parámetros de consulta inválidos
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Token ausente, inválido o vencido
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Error interno del servidor
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /exchange/rates:
     get:
       tags:
@@ -2140,6 +2211,44 @@ components:
         expiresAt:
           type: string
           format: date-time
+
+    RatesHistory:
+      type: object
+      properties:
+        source:
+          type: string
+          enum:
+            - ARS
+            - USD
+            - EUR
+        target:
+          type: string
+          enum:
+            - ARS
+            - USD
+            - EUR
+        days:
+          type: integer
+        history:
+          type: array
+          items:
+            $ref: "#/components/schemas/QuoteHistoryPoint"
+
+    QuoteHistoryPoint:
+      type: object
+      properties:
+        date:
+          type: string
+          format: date
+          example: "2026-08-07"
+        rate:
+          type: string
+          example: "1490.5000000000"
+        provider:
+          type: string
+          enum:
+            - frankfurter
+            - exchange_rate_api
 
     WalletSummary:
       type: object
