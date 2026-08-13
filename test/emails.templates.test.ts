@@ -46,6 +46,18 @@ describe("createIncomeReceipt", () => {
     expect(content.htmlBody).toContain("&lt;100&gt;");
     expect(content.htmlBody).toContain("tx &amp; 1");
   });
+
+  it("muestra la billetera como img con cid (no svg inline) para Gmail", () => {
+    const content = createIncomeReceipt({
+      amount: "5000",
+      currency: "ARS",
+      transactionId: "tx-1",
+      newBalance: "10000",
+    });
+
+    expect(content.htmlBody).toContain('src="cid:wallet-badge"');
+    expect(content.htmlBody).not.toContain("<svg");
+  });
 });
 
 describe("createExchangeReceipt", () => {
